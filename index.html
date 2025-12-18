@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AmazingTravel - 專業雲端行程管理</title>
+    
+    <!-- PWA Meta Tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    
+    <!-- 加入 manifest.json -->
+    <link rel="manifest" href="manifest.json">
+
+    <!-- 修正後的 Service Worker 註冊腳本：加入錯誤捕捉以防止 Unhandled Rejection -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function() {
+          // 僅在非 blob 環境下嘗試註冊，並擷取所有錯誤
+          if (window.location.protocol.startsWith('http')) {
+            navigator.serviceWorker.register('sw.js').catch(function(err) {
+              console.warn('ServiceWorker 註冊失敗（可能處於預覽環境）：', err);
+            });
+          }
+        });
+      }
+    </script>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f7f9fb; overscroll-behavior-y: none; }
+        .card { box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); border-radius: 1rem; }
+        .destination-card { cursor: pointer; transition: all 0.15s ease; padding: 0.75rem 1rem; border-radius: 0.5rem; text-align: left; font-size: 0.9rem; font-weight: 600; display: flex; flex-direction: column; align-items: flex-start; border-left-width: 4px; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); background: white; }
+        .destination-card:hover { transform: translateY(-2px); box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .unscheduled { border-color: #f87171; }
+        .scheduled { border-color: #34d399; }
+        .itinerary-item { border-left: 4px solid #4f46e5; padding: 0.5rem 1rem; margin-bottom: 0.5rem; border-radius: 0.25rem; display: flex; justify-content: space-between; align-items: center; transition: background 0.2s; }
+        .time-tag { font-weight: bold; font-size: 0.8rem; padding: 4px 8px; border-radius: 9999px; margin-right: 0.75rem; display: inline-block; }
+        .modal { transition: opacity 0.25s ease; z-index: 100; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+        .online { background-color: #10b981; box-shadow: 0 0 5px #10b981; }
+        .offline { background-color: #9ca3af; }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div class="max-w-4xl mx-auto">
+        <!-- 頂部導航 -->
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 border-b pb-4">
+            <div class="mb-4 md:mb-0">
+                <h1 class="text-3xl font-bold text-gray-800 tracking-tight">AmazingTravel</h1>
+                <div class="flex items-center space-x-3 mt-1">
+                    <span id="sync-indicator" class="text-xs flex items-center text-gray-400">
+                        <span class="status-dot offline" id="status-dot"></span>
+                        <span id="status-text">未連線</span>
+                    </span>
+                    <span id="mode-badge" class="px-2 py-0.5 bg-gray-200 text-gray-600 text-[10px] rounded uppercase font-bold">本地模式</span>
+                </div>
+            </div>
+            
+            <div class="flex flex-wrap gap-2">
+                <button onclick="openCloudModal()" class="flex items-center px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg shadow-sm hover:bg-indigo-100 transition font-semibold">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
+                    </svg>
+                    雲端與共享
+                </button>
+                <button onclick="openTripManagerModal()" class="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg shadow hover:bg-indigo-700 transition font-semibold">
+                    行程管理 (<span id="saved-count-badge">0</span>)
+                </button>
+            </div>
+        </div>
+
+        <!-- 亞洲熱門機場數據 -->
+        <datalist id="popular-airports">
+            <option value="東京成田 (NRT)">
+            <option value="東京羽田 (HND)">
+            <option value="大阪關西 (KIX)">
+            <option value="首爾仁川 (ICN)">
+            <option value="曼谷蘇凡納布 (BKK)">
+            <option value="台北桃園 (TPE)">
+            <option value="香港國際 (HKG)">
+            <option value="新加坡樟宜 (SIN)">
+            <option value="福岡機場 (FUK)">
+            <option value="沖繩那霸 (OKA)">
+        </datalist>
+
+        <!-- 協作者清單 -->
+        <div id="collaborators-area" class="hidden mb-6 bg-white p-3 rounded-xl border border-indigo-100 flex items-center space-x-2 overflow-x-auto shadow-sm">
+            <span class="text-xs font-bold text-indigo-500 whitespace-nowrap">正在線上：</span>
+            <div id="collaborators-list" class="flex space-x-2"></div>
+        </div>
+
+        <!-- 旅行基本資料 -->
+        <div class="card bg-white p-6 mb-8">
+            <h2 class="text-xl font-semibold text-indigo-700 mb-4">旅行基本資料</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">出發日期</label>
+                    <input type="date" id="start-date" onchange="handleInputChange()" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">回程日期</label>
+                    <input type="date" id="end-date" onchange="handleInputChange()" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">入住酒店</label>
+                    <input type="text" id="hotel-name" placeholder="輸入酒店名稱" onchange="handleInputChange()" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="p-4 bg-blue-50 rounded-xl">
+                    <label class="text-xs font-bold text-blue-600 uppercase tracking-wider">🛫 去程航班</label>
+                    <div class="grid grid-cols-2 gap-2 mt-2">
+                        <input type="text" id="depart-location" list="popular-airports" placeholder="機場/城市" onchange="handleInputChange()" class="text-sm p-2 border rounded-md">
+                        <input type="time" id="depart-time" onchange="handleInputChange()" class="text-sm p-2 border rounded-md">
+                    </div>
+                </div>
+                <div class="p-4 bg-orange-50 rounded-xl">
+                    <label class="text-xs font-bold text-orange-600 uppercase tracking-wider">🛬 回程航班</label>
+                    <div class="grid grid-cols-2 gap-2 mt-2">
+                        <input type="text" id="return-location" list="popular-airports" placeholder="機場/城市" onchange="handleInputChange()" class="text-sm p-2 border rounded-md">
+                        <input type="time" id="return-time" onchange="handleInputChange()" class="text-sm p-2 border rounded-md">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 目的地管理 (預設收合) -->
+        <div class="card bg-white p-6 mb-8 overflow-hidden">
+            <div class="flex justify-between items-center cursor-pointer select-none" onclick="toggleDestinationSection()">
+                <h2 class="text-xl font-semibold text-gray-800 flex items-center">
+                    目的地清單
+                    <svg id="dest-chevron" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 ml-2 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                </h2>
+                <div class="flex space-x-3 items-center" onclick="event.stopPropagation()">
+                    <label class="text-xs text-indigo-600 font-bold flex items-center cursor-pointer hover:underline">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                        </svg>
+                        匯入 TXT
+                        <input type="file" id="import-txt" accept=".txt" onchange="importDestinationsFromTxt(event)" class="hidden">
+                    </label>
+                    <button onclick="handleClearAllClick()" class="text-xs text-red-500 hover:text-red-700 font-bold uppercase tracking-tighter">清空全部</button>
+                </div>
+            </div>
+            
+            <div id="dest-section-content" class="hidden mt-4">
+                <div class="flex space-x-2 mb-4">
+                    <input type="text" id="new-destination-name" placeholder="新增地點 (可逗號分隔)" class="flex-grow rounded-md border-gray-300 shadow-sm p-2 border text-sm focus:ring-2 focus:ring-indigo-200 outline-none">
+                    <button onclick="addCustomDestination()" class="px-6 py-2 bg-indigo-600 text-white rounded-md text-sm font-bold shadow-md hover:bg-indigo-700 transition">新增</button>
+                </div>
+                <div id="destination-list-container" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+            </div>
+        </div>
+
+        <!-- 每日行程預覽 -->
+        <div id="itinerary-display-area" class="space-y-6 mb-20"></div>
+    </div>
+
+    <!-- 各種彈窗 -->
+    
+    <!-- 雲端與共享 -->
+    <div id="cloud-modal" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-[100] hidden modal">
+        <div class="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-md mx-4 border border-indigo-100">
+            <h3 class="text-xl font-bold mb-6 text-indigo-700 text-center">雲端與共享同步</h3>
+            <div class="space-y-6">
+                <div class="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                    <label class="block text-sm font-bold text-gray-700 mb-2">儲存模式</label>
+                    <div class="flex p-1 bg-gray-200 rounded-lg">
+                        <button id="btn-mode-private" onclick="switchMode('private')" class="flex-1 py-2 text-sm font-bold rounded-md transition duration-200">各自獨立</button>
+                        <button id="btn-mode-shared" onclick="switchMode('shared')" class="flex-1 py-2 text-sm font-medium rounded-md transition duration-200">資料共享</button>
+                    </div>
+                    <p id="mode-desc" class="text-xs text-gray-400 mt-2">選擇獨立模式以保護您的隱私。</p>
+                </div>
+                <div id="shared-input-area" class="hidden">
+                    <label class="block text-sm font-bold text-gray-700 mb-2 text-indigo-600">共享金鑰 (Share ID)</label>
+                    <div class="flex space-x-2">
+                        <input type="text" id="share-id-input" placeholder="例如: TRIP2026" class="flex-grow p-2 border rounded-md font-mono uppercase focus:ring-2 focus:ring-indigo-500">
+                        <button onclick="joinSharedTrip()" class="bg-indigo-600 text-white px-6 py-2 rounded-md text-sm font-bold">加入</button>
+                    </div>
+                </div>
+                <div class="text-[10px] text-gray-400 border-t pt-4 text-center">
+                    Device ID: <span id="my-user-id" class="font-mono text-gray-600">載入中...</span>
+                </div>
+            </div>
+            <div class="mt-8 flex justify-center">
+                <button onclick="closeCloudModal()" class="px-10 py-2 bg-gray-100 text-gray-600 rounded-xl font-bold hover:bg-gray-200 transition">關閉</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 行程管理中心 -->
+    <div id="trip-manager-modal" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-[100] hidden modal">
+        <div class="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-lg mx-4">
+            <h3 class="text-xl font-bold mb-4 text-indigo-700">行程管理中心</h3>
+            <div class="bg-indigo-50 p-4 rounded-xl mb-6">
+                <label class="block text-xs font-bold text-indigo-600 mb-2 uppercase">備份目前行程</label>
+                <div class="flex space-x-2">
+                    <input type="text" id="save-trip-name" placeholder="行程標題" class="flex-grow p-2 border rounded-md text-sm">
+                    <button onclick="saveCurrentToLibrary()" class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-bold">儲存</button>
+                </div>
+            </div>
+            <div class="max-h-60 overflow-y-auto space-y-2" id="library-list"></div>
+            <div class="mt-6 flex justify-end">
+                <button onclick="closeTripManagerModal()" class="px-6 py-2 bg-gray-100 text-gray-600 rounded-xl font-bold">關閉</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 確認對話框 (通用) -->
+    <div id="confirm-modal" class="fixed inset-0 bg-gray-900 bg-opacity-80 flex items-center justify-center z-[200] hidden modal">
+        <div class="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-sm mx-4 text-center">
+            <h3 class="text-xl font-bold text-gray-800 mb-2">確認執行？</h3>
+            <p id="confirm-message" class="text-gray-500 mb-6 text-sm">此動作無法復原，您確定嗎？</p>
+            <div class="flex space-x-3">
+                <button id="confirm-cancel" class="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold">取消</button>
+                <button id="confirm-ok" class="flex-1 py-3 bg-red-500 text-white rounded-xl font-bold shadow-lg shadow-red-200">確定</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 細節設定對話框 -->
+    <div id="date-selector-modal" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-[110] hidden modal">
+        <div class="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-sm mx-4">
+            <h3 id="modal-title" class="text-lg font-bold mb-4 text-indigo-700">安排行程細節</h3>
+            <div class="space-y-4">
+                <div class="grid grid-cols-2 gap-2">
+                    <div><label class="text-xs font-bold text-gray-500">開始時間</label><input type="time" id="m-start-time" class="w-full p-2 border rounded"></div>
+                    <div><label class="text-xs font-bold text-gray-500">結束時間</label><input type="time" id="m-end-time" class="w-full p-2 border rounded"></div>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="text-xs font-bold text-gray-500">交通工具</label>
+                        <select id="m-transport" class="w-full p-2 border rounded text-sm bg-white">
+                            <option value="地鐵/火車">地鐵/火車</option><option value="巴士">巴士</option>
+                            <option value="步行">步行</option><option value="計程車/Uber">計程車/Uber</option>
+                            <option value="自駕">自駕</option><option value="渡輪">渡輪</option>
+                        </select>
+                    </div>
+                    <div><label class="text-xs font-bold text-gray-500">人均消費</label><input type="text" id="m-cost" placeholder="預算" class="w-full p-2 border rounded text-sm"></div>
+                </div>
+                <div><label class="text-xs font-bold text-gray-500">選擇日期</label><div id="m-date-options" class="mt-1 space-y-1 max-h-32 overflow-y-auto"></div></div>
+            </div>
+            <div class="mt-6 flex justify-between">
+                <button onclick="unassignDestination()" class="text-red-500 text-sm font-bold">取消排定</button>
+                <div class="space-x-2">
+                    <button onclick="closeDateModal()" class="px-4 py-2 text-gray-400">取消</button>
+                    <button onclick="saveDateAssignment()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold">確認</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot, updateDoc, collection, deleteDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- 初始化參數 ---
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'amazing-travel-pwa-v5';
+
+        let currentUser = null;
+        let currentMode = 'private'; 
+        let currentShareId = '';
+        let unsubscribeSync = null;
+        let unsubscribeLibrary = null;
+
+        let appData = {
+            inputs: { startDate: '', endDate: '', hotelName: '', departLocation: '', departTime: '10:00', returnLocation: '', returnTime: '18:00' },
+            destinations: [],
+            collaborators: {}
+        };
+
+        let activeEditingName = null;
+
+        // --- 功能模組 ---
+
+        // 1. 通用確認對話框
+        window.showConfirm = (msg, onOk) => {
+            const modal = document.getElementById('confirm-modal');
+            const msgEl = document.getElementById('confirm-message');
+            const okBtn = document.getElementById('confirm-ok');
+            const cancelBtn = document.getElementById('confirm-cancel');
+            
+            msgEl.textContent = msg;
+            modal.classList.remove('hidden');
+            
+            const cleanup = () => {
+                modal.classList.add('hidden');
+                okBtn.onclick = null;
+                cancelBtn.onclick = null;
+            };
+
+            okBtn.onclick = () => { onOk(); cleanup(); };
+            cancelBtn.onclick = cleanup;
+        };
+
+        // 2. Firebase 驗證
+        const initAuth = async () => {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (e) { console.error("Auth failed", e); }
+        };
+
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                currentUser = user;
+                const userIdEl = document.getElementById('my-user-id');
+                if (userIdEl) userIdEl.textContent = user.uid;
+                startSync();
+                startLibrarySync();
+            }
+        });
+
+        // 3. 資料同步核心
+        const startSync = () => {
+            if (!currentUser) return;
+            if (unsubscribeSync) unsubscribeSync();
+            
+            const statusDot = document.getElementById('status-dot');
+            const statusText = document.getElementById('status-text');
+            const modeBadge = document.getElementById('mode-badge');
+
+            let syncDocRef;
+            if (currentMode === 'private') {
+                syncDocRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'trips', 'active');
+                if (modeBadge) {
+                    modeBadge.textContent = "個人雲端";
+                    modeBadge.className = "px-2 py-0.5 bg-gray-100 text-gray-500 text-[10px] rounded uppercase font-bold";
+                }
+            } else {
+                if (!currentShareId) return;
+                syncDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'shared_trips', currentShareId);
+                if (modeBadge) {
+                    modeBadge.textContent = `共享: ${currentShareId}`;
+                    modeBadge.className = "px-2 py-0.5 bg-indigo-600 text-white text-[10px] rounded uppercase font-bold shadow-md";
+                }
+            }
+
+            unsubscribeSync = onSnapshot(syncDocRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    appData.inputs = data.inputs || appData.inputs;
+                    appData.destinations = data.destinations || [];
+                    appData.collaborators = data.collaborators || {};
+                    updateUI();
+                    if (statusDot) statusDot.className = "status-dot online";
+                    if (statusText) statusText.textContent = "即時同步中";
+                } else {
+                    pushToCloud();
+                }
+            }, (err) => {
+                if (statusDot) statusDot.className = "status-dot offline";
+                if (statusText) statusText.textContent = "同步異常";
+            });
+
+            if (currentMode === 'shared') updatePresence();
+        };
+
+        const pushToCloud = async () => {
+            if (!currentUser) return;
+            let syncDocRef;
+            if (currentMode === 'private') {
+                syncDocRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'trips', 'active');
+            } else {
+                if (!currentShareId) return;
+                syncDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'shared_trips', currentShareId);
+                appData.collaborators[currentUser.uid] = { name: `用戶 ${currentUser.uid.substring(0,4)}`, lastSeen: Date.now() };
+            }
+            try { 
+                await setDoc(syncDocRef, appData); 
+            } catch (err) {}
+        };
+
+        const updatePresence = async () => {
+            if (currentMode !== 'shared' || !currentShareId || !currentUser) return;
+            const syncDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'shared_trips', currentShareId);
+            const updateObj = {};
+            updateObj[`collaborators.${currentUser.uid}`] = { name: `用戶 ${currentUser.uid.substring(0,4)}`, lastSeen: Date.now() };
+            try { await updateDoc(syncDocRef, updateObj); } catch(e) {}
+        };
+
+        // --- 業務邏輯 ---
+
+        window.toggleDestinationSection = () => {
+            const content = document.getElementById('dest-section-content');
+            const chevron = document.getElementById('dest-chevron');
+            if (content.classList.contains('hidden')) {
+                content.classList.remove('hidden');
+                chevron.classList.add('rotate-180');
+            } else {
+                content.classList.add('hidden');
+                chevron.classList.remove('rotate-180');
+            }
+        };
+
+        window.handleInputChange = () => {
+            appData.inputs.startDate = document.getElementById('start-date').value;
+            appData.inputs.endDate = document.getElementById('end-date').value;
+            appData.inputs.hotelName = document.getElementById('hotel-name').value;
+            appData.inputs.departLocation = document.getElementById('depart-location').value;
+            appData.inputs.departTime = document.getElementById('depart-time').value;
+            appData.inputs.returnLocation = document.getElementById('return-location').value;
+            appData.inputs.returnTime = document.getElementById('return-time').value;
+            pushToCloud();
+            updateUI();
+        };
+
+        window.addCustomDestination = () => {
+            const input = document.getElementById('new-destination-name');
+            const names = input.value.split(/[,\uff0c]/).map(n => n.trim()).filter(n => n);
+            names.forEach(name => {
+                if (!appData.destinations.find(d => d.name === name)) {
+                    appData.destinations.push({ name, scheduled: null });
+                }
+            });
+            input.value = '';
+            pushToCloud();
+            updateUI();
+        };
+
+        window.handleClearAllClick = () => {
+            showConfirm("確定要清空目的地清單上的所有地點嗎？", () => {
+                appData.destinations = [];
+                pushToCloud();
+                updateUI();
+            });
+        };
+
+        window.removeDestination = (name) => {
+            appData.destinations = appData.destinations.filter(d => d.name !== name);
+            pushToCloud();
+            updateUI();
+        };
+
+        window.openGoogleMaps = (name) => {
+            const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name)}`;
+            window.open(url, '_blank');
+        };
+
+        window.importDestinationsFromTxt = (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const text = e.target.result;
+                const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l);
+                lines.forEach(name => {
+                    if (!appData.destinations.find(d => d.name === name)) {
+                        appData.destinations.push({ name, scheduled: null });
+                    }
+                });
+                pushToCloud();
+                updateUI();
+                event.target.value = '';
+            };
+            reader.readAsText(file);
+        };
+
+        // --- 行程管理 ---
+        window.saveCurrentToLibrary = async () => {
+            const nameInput = document.getElementById('save-trip-name');
+            const name = nameInput.value.trim();
+            if (!name || !currentUser) return;
+            const tripId = `trip_${Date.now()}`;
+            const libDocRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'library', tripId);
+            await setDoc(libDocRef, { tripName: name, saveDate: new Date().toLocaleString(), data: JSON.parse(JSON.stringify(appData)) });
+            nameInput.value = '';
+            alert("成功備份行程");
+        };
+
+        const startLibrarySync = () => {
+            if (!currentUser) return;
+            const libColl = collection(db, 'artifacts', appId, 'users', currentUser.uid, 'library');
+            unsubscribeLibrary = onSnapshot(libColl, (snapshot) => {
+                const list = [];
+                snapshot.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
+                renderLibrary(list);
+            });
+        };
+
+        window.loadFromLibrary = (id) => {
+            showConfirm("載入備份將會覆蓋目前的畫面內容，確定嗎？", async () => {
+                const libDocRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'library', id);
+                const snap = await getDoc(libDocRef);
+                if (snap.exists()) {
+                    const libData = snap.data().data;
+                    appData.inputs = libData.inputs;
+                    appData.destinations = libData.destinations;
+                    pushToCloud();
+                    closeTripManagerModal();
+                }
+            });
+        };
+
+        window.deleteFromLibrary = (id) => {
+            showConfirm("確定要刪除這筆行程紀錄嗎？", async () => {
+                const libDocRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'library', id);
+                await deleteDoc(libDocRef);
+            });
+        };
+
+        // --- UI 更新 ---
+        const updateUI = () => {
+            const f = { 'start-date': 'startDate', 'end-date': 'endDate', 'hotel-name': 'hotelName', 'depart-location': 'departLocation', 'depart-time': 'departTime', 'return-location': 'returnLocation', 'return-time': 'returnTime' };
+            Object.keys(f).forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.value = appData.inputs[f[id]] || '';
+            });
+
+            const container = document.getElementById('destination-list-container');
+            if (container) {
+                container.innerHTML = appData.destinations.map(d => `
+                    <div class="destination-card ${d.scheduled ? 'scheduled' : 'unscheduled'}" onclick="openDateModal('${d.name.replace(/'/g, "\\'")}')">
+                        <div class="flex justify-between w-full items-center">
+                            <span class="truncate pr-2">${d.name}</span>
+                            <div class="flex items-center space-x-1 shrink-0" onclick="event.stopPropagation()">
+                                 <button onclick="openGoogleMaps('${d.name.replace(/'/g, "\\'")}')" class="p-1.5 text-blue-500 hover:bg-blue-50 rounded-md transition">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                 </button>
+                                 <button onclick="removeDestination('${d.name.replace(/'/g, "\\'")}')" class="p-1.5 text-red-400 hover:bg-red-50 rounded-md transition">✕</button>
+                            </div>
+                        </div>
+                        <span class="text-[10px] font-normal opacity-50 mt-1">${d.scheduled ? '📅 ' + d.scheduled.date : '未安排'}</span>
+                    </div>
+                `).join('');
+            }
+            renderItinerary();
+
+            const collList = document.getElementById('collaborators-list');
+            if (collList) {
+                if (currentMode === 'shared' && Object.keys(appData.collaborators).length > 0) {
+                    document.getElementById('collaborators-area').classList.remove('hidden');
+                    const now = Date.now();
+                    collList.innerHTML = Object.entries(appData.collaborators)
+                        .filter(([uid, info]) => now - info.lastSeen < 60000)
+                        .map(([uid, info]) => `<div class="flex items-center px-3 py-1 bg-indigo-50 rounded-full border border-indigo-100"><span class="status-dot online"></span><span class="text-[10px] text-indigo-700 font-bold">${info.name}${uid === currentUser?.uid ? ' (我)' : ''}</span></div>`).join('');
+                } else { document.getElementById('collaborators-area').classList.add('hidden'); }
+            }
+        };
+
+        const renderLibrary = (list) => {
+            const container = document.getElementById('library-list');
+            const badge = document.getElementById('saved-count-badge');
+            if(badge) badge.textContent = list.length;
+            if (!container) return;
+            if (list.length === 0) { container.innerHTML = `<p class="text-center text-gray-400 text-xs py-10">圖書館內尚無紀錄</p>`; return; }
+            container.innerHTML = list.map(trip => `
+                <div class="flex justify-between items-center p-4 bg-white border border-gray-100 rounded-xl shadow-sm hover:border-indigo-300 transition">
+                    <div><div class="text-sm font-bold text-gray-800">${trip.tripName}</div><div class="text-[10px] text-gray-400">${trip.saveDate}</div></div>
+                    <div class="flex space-x-2"><button onclick="loadFromLibrary('${trip.id}')" class="text-xs text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-md font-bold">載入</button><button onclick="deleteFromLibrary('${trip.id}')" class="text-xs text-red-300 px-1">刪除</button></div>
+                </div>
+            `).join('');
+        };
+
+        const renderItinerary = () => {
+            const area = document.getElementById('itinerary-display-area');
+            if (!area) return;
+            const days = getDaysArray(appData.inputs.startDate, appData.inputs.endDate);
+            if (days.length === 0) { area.innerHTML = `<div class="p-10 text-center text-gray-400 bg-white rounded-2xl border-2 border-dashed border-gray-200">請先設定旅行日期</div>`; return; }
+            area.innerHTML = days.map(day => {
+                const dayEvents = appData.destinations.filter(d => d.scheduled && d.scheduled.date === day.date);
+                dayEvents.sort((a,b) => a.scheduled.start.localeCompare(b.scheduled.start));
+                let html = `<div class="card bg-white p-5 border-l-8 border-indigo-600"><div class="flex justify-between items-center mb-5"><h3 class="text-xl font-bold text-gray-800">${day.display}</h3></div><div class="space-y-4">`;
+                if (day.isFirst) html += `<div class="itinerary-item border-blue-400 bg-blue-50/30"><span class="text-sm font-bold text-blue-800">🛫 ${appData.inputs.departTime} | 抵達：${appData.inputs.departLocation}</span></div>`;
+                if (dayEvents.length === 0) { html += `<p class="text-xs text-gray-300 italic py-2">本日無景點排程</p>`; } else {
+                    dayEvents.forEach(ev => { 
+                        html += `
+                        <div class="itinerary-item bg-gray-50/50 hover:bg-gray-50 border-indigo-200 flex flex-col items-start space-y-1">
+                            <div class="flex items-center w-full justify-between">
+                                <div class="flex items-center">
+                                    <span class="time-tag bg-indigo-600 text-white shadow-sm">${ev.scheduled.start}-${ev.scheduled.end}</span>
+                                    <span class="font-bold text-gray-700">${ev.name}</span>
+                                </div>
+                                <button onclick="openGoogleMaps('${ev.name.replace(/'/g, "\\'")}')" class="text-blue-500 hover:text-blue-700 p-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /></svg>
+                                </button>
+                            </div>
+                            <div class="text-[10px] font-semibold text-indigo-400 pl-2">
+                                🚗 ${ev.scheduled.transport} | 💰 預算: ${ev.scheduled.cost || '免費'}
+                            </div>
+                        </div>`; 
+                    });
+                }
+                if (day.isLast) html += `<div class="itinerary-item border-orange-400 bg-orange-50/30"><span class="text-sm font-bold text-orange-800">🛬 ${appData.inputs.returnTime} | 離開：${appData.inputs.returnLocation}</span></div>`;
+                html += `</div></div>`; return html;
+            }).join('');
+        };
+
+        const getDaysArray = (s, e) => {
+            if (!s || !e) return [];
+            const start = new Date(s), end = new Date(e);
+            if (isNaN(start) || isNaN(end) || start > end) return [];
+            const days = [];
+            let curr = new Date(start);
+            while (curr <= end) {
+                const iso = curr.toISOString().split('T')[0];
+                days.push({ date: iso, display: curr.toLocaleDateString('zh-TW', { month: 'short', day: 'numeric', weekday: 'short' }), isFirst: iso === s, isLast: iso === e });
+                curr.setDate(curr.getDate() + 1);
+            }
+            return days;
+        };
+
+        // --- 控制器 ---
+        window.openCloudModal = () => document.getElementById('cloud-modal').classList.remove('hidden');
+        window.closeCloudModal = () => document.getElementById('cloud-modal').classList.add('hidden');
+        window.openTripManagerModal = () => document.getElementById('trip-manager-modal').classList.remove('hidden');
+        window.closeTripManagerModal = () => document.getElementById('trip-manager-modal').classList.add('hidden');
+        
+        window.openDateModal = (name) => {
+            activeEditingName = name;
+            const dest = appData.destinations.find(d => d.name === name);
+            document.getElementById('modal-title').textContent = name;
+            document.getElementById('m-start-time').value = dest.scheduled?.start || '10:00';
+            document.getElementById('m-end-time').value = dest.scheduled?.end || '12:00';
+            document.getElementById('m-transport').value = dest.scheduled?.transport || '地鐵/火車';
+            document.getElementById('m-cost').value = dest.scheduled?.cost || '';
+            const days = getDaysArray(appData.inputs.startDate, appData.inputs.endDate);
+            document.getElementById('m-date-options').innerHTML = days.map(d => `<label class="flex items-center p-2 border rounded-lg hover:bg-indigo-50 cursor-pointer transition mb-1"><input type="radio" name="m-date" value="${d.date}" ${dest.scheduled?.date === d.date ? 'checked' : ''} class="mr-3 accent-indigo-600"><span class="text-sm font-medium">${d.display}</span></label>`).join('');
+            document.getElementById('date-selector-modal').classList.remove('hidden');
+        };
+
+        window.closeDateModal = () => document.getElementById('date-selector-modal').classList.add('hidden');
+        
+        window.saveDateAssignment = () => {
+            const selectedDate = document.querySelector('input[name="m-date"]:checked')?.value;
+            if (!selectedDate) return;
+            const dest = appData.destinations.find(d => d.name === activeEditingName);
+            dest.scheduled = { 
+                date: selectedDate, start: document.getElementById('m-start-time').value, end: document.getElementById('m-end-time').value,
+                transport: document.getElementById('m-transport').value, cost: document.getElementById('m-cost').value
+            };
+            pushToCloud(); updateUI(); closeDateModal();
+        };
+        
+        window.unassignDestination = () => { const dest = appData.destinations.find(d => d.name === activeEditingName); dest.scheduled = null; pushToCloud(); updateUI(); closeDateModal(); };
+        
+        window.switchMode = (mode) => {
+            currentMode = mode;
+            const btnPri = document.getElementById('btn-mode-private');
+            const btnSha = document.getElementById('btn-mode-shared');
+            const shareInput = document.getElementById('shared-input-area');
+            if (mode === 'private') {
+                btnPri.className = "flex-1 py-2 text-sm font-bold rounded-md bg-white shadow-sm text-indigo-700";
+                btnSha.className = "flex-1 py-2 text-sm font-medium rounded-md text-gray-500";
+                shareInput.classList.add('hidden');
+                startSync();
+            } else {
+                btnSha.className = "flex-1 py-2 text-sm font-bold rounded-md bg-white shadow-sm text-indigo-700";
+                btnPri.className = "flex-1 py-2 text-sm font-medium rounded-md text-gray-500";
+                shareInput.classList.remove('hidden');
+            }
+        };
+        
+        window.joinSharedTrip = () => { 
+            currentShareId = document.getElementById('share-id-input').value.trim().toUpperCase(); 
+            if (currentShareId) { startSync(); closeCloudModal(); } 
+        };
+
+    </script>
+</body>
+</html>
