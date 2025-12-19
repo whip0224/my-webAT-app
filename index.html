@@ -10,11 +10,10 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="manifest" href="manifest.json">
 
-    <!-- Service Worker 註冊腳本 (此處已足夠，無需在 module script 中重複) -->
+    <!-- Service Worker 註冊腳本 -->
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', function() {
-          // 檢查協議，避免在不支援的環境 (如某些預覽 blob) 報錯
           if (window.location.protocol.startsWith('http')) {
             navigator.serviceWorker.register('sw.js').catch(function(err) {
               console.warn('PWA ServiceWorker 註冊受限：', err);
@@ -179,6 +178,8 @@
             </div>
             <div id="exchange-result" class="mt-4 hidden p-4 bg-green-50 rounded-xl border border-green-200 text-center md:text-left">
                 <span id="exchange-result-text" class="text-3xl font-black text-green-800 leading-tight tracking-tight">--</span>
+                <!-- 新增參考來源標示 -->
+                <p class="text-[10px] text-gray-400 mt-1 text-right">資料來源：ExchangeRate-API</p>
             </div>
         </div>
 
@@ -322,7 +323,7 @@
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'amazing-travel-asia-pro-v15';
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'amazing-travel-asia-pro-v16';
 
         let currentUser = null;
         let currentMode = 'private'; 
@@ -330,6 +331,9 @@
         let unsubscribeSync = null;
         let unsubscribeLibrary = null;
 
+        const LOCAL_STORAGE_KEY = 'amazing_travel_local_v1';
+
+        // 預設資料
         let appData = {
             inputs: { startDate: '', endDate: '', hotelName: '', departLocation: '', departTime: '10:00', returnLocation: '', returnTime: '18:30' },
             destinations: [],
@@ -338,8 +342,26 @@
 
         let activeEditingName = null;
 
-        // --- 功能函數 ---
+        // --- 本地持久化 (LocalStorage) 函式 ---
+        function saveLocal() {
+            try {
+                localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(appData));
+            } catch(e) { console.warn("Local Save Error", e); }
+        }
 
+        function loadLocal() {
+            try {
+                const data = localStorage.getItem(LOCAL_STORAGE_KEY);
+                if (data) {
+                    const parsed = JSON.parse(data);
+                    // 合併以確保新欄位存在
+                    appData = { ...appData, ...parsed };
+                    updateUI(); // 立即更新畫面
+                }
+            } catch(e) { console.warn("Local Load Error", e); }
+        }
+
+        // --- 核心工具 ---
         function getDaysArray(s, e) {
             if (!s || !e) return [];
             const start = new Date(s), end = new Date(e);
@@ -359,31 +381,9 @@
             return days;
         }
 
-        async function initAuth() {
-            try {
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
-                }
-            } catch (e) { console.error("驗證失敗", e); }
-        }
-
-        const renderLibrary = (list) => {
-            const container = document.getElementById('library-list');
-            const badge = document.getElementById('saved-count-badge');
-            if (badge) badge.textContent = list.length;
-            if (!container) return;
-            if (list.length === 0) { container.innerHTML = `<p class="text-center text-gray-400 text-xs py-8 font-medium">目前無雲端備份紀錄</p>`; return; }
-            container.innerHTML = list.map(trip => `
-                <div class="flex justify-between items-center p-4 bg-white border border-gray-100 rounded-xl shadow-sm hover:border-indigo-300 transition">
-                    <div><div class="text-sm font-bold text-gray-800">${trip.tripName}</div><div class="text-[10px] text-gray-400">${trip.saveDate}</div></div>
-                    <div class="flex space-x-2 font-bold"><button onclick="loadFromLibrary('${trip.id}')" class="text-xs text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-md">載入</button><button onclick="deleteFromLibrary('${trip.id}')" class="text-xs text-red-300 px-1 font-normal">刪除</button></div>
-                </div>
-            `).join('');
-        };
-
+        // --- 雲端與資料流 ---
         const syncDataToCloud = async () => {
+            saveLocal(); // 同步寫入本地
             if (!currentUser) return;
             let syncDocRef;
             if (currentMode === 'private') {
@@ -393,6 +393,33 @@
                 syncDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'shared_trips', currentShareId);
             }
             try { await setDoc(syncDocRef, appData); } catch (err) {}
+        };
+
+        const updateUI = () => {
+            const fields = { 'start-date': 'startDate', 'end-date': 'endDate', 'hotel-name': 'hotelName', 'depart-location': 'departLocation', 'depart-time': 'departTime', 'return-location': 'returnLocation', 'return-time': 'returnTime' };
+            Object.entries(fields).forEach(([id, key]) => {
+                const el = document.getElementById(id);
+                if (el) el.value = appData.inputs[key] || '';
+            });
+
+            const container = document.getElementById('destination-list-container');
+            if (container) {
+                container.innerHTML = appData.destinations.map(d => `
+                    <div class="destination-card ${d.scheduled ? 'scheduled' : 'unscheduled'}" onclick="openDateModal('${d.name.replace(/'/g, "\\'")}')">
+                        <div class="flex justify-between items-center w-full">
+                            <span class="truncate font-bold text-gray-700 pr-1">${d.name}</span>
+                            <div class="flex items-center space-x-1 shrink-0" onclick="event.stopPropagation()">
+                                 <button onclick="openGoogleMaps('${d.name.replace(/'/g, "\\'")}')" class="p-1.5 text-blue-500 hover:bg-blue-50 rounded transition" title="地圖">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                 </button>
+                                 <button onclick="removeDestination('${d.name.replace(/'/g, "\\'")}')" class="p-1.5 text-red-400 hover:bg-red-50 rounded transition">✕</button>
+                            </div>
+                        </div>
+                        <span class="text-[10px] text-gray-400 mt-1 font-bold tracking-tight">${d.scheduled ? '📅 ' + d.scheduled.date : '未安排日期'}</span>
+                    </div>
+                `).join('');
+            }
+            renderItinerary();
         };
 
         const renderItinerary = () => {
@@ -437,33 +464,6 @@
             }).join('');
         };
 
-        const updateUI = () => {
-            const fields = { 'start-date': 'startDate', 'end-date': 'endDate', 'hotel-name': 'hotelName', 'depart-location': 'departLocation', 'depart-time': 'departTime', 'return-location': 'returnLocation', 'return-time': 'returnTime' };
-            Object.entries(fields).forEach(([id, key]) => {
-                const el = document.getElementById(id);
-                if (el) el.value = appData.inputs[key] || '';
-            });
-
-            const container = document.getElementById('destination-list-container');
-            if (container) {
-                container.innerHTML = appData.destinations.map(d => `
-                    <div class="destination-card ${d.scheduled ? 'scheduled' : 'unscheduled'}" onclick="openDateModal('${d.name.replace(/'/g, "\\'")}')">
-                        <div class="flex justify-between items-center w-full">
-                            <span class="truncate font-bold text-gray-700 pr-1">${d.name}</span>
-                            <div class="flex items-center space-x-1 shrink-0" onclick="event.stopPropagation()">
-                                 <button onclick="openGoogleMaps('${d.name.replace(/'/g, "\\'")}')" class="p-1.5 text-blue-500 hover:bg-blue-50 rounded transition" title="地圖">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                                 </button>
-                                 <button onclick="removeDestination('${d.name.replace(/'/g, "\\'")}')" class="p-1.5 text-red-400 hover:bg-red-50 rounded transition">✕</button>
-                            </div>
-                        </div>
-                        <span class="text-[10px] text-gray-400 mt-1 font-bold tracking-tight">${d.scheduled ? '📅 ' + d.scheduled.date : '未安排日期'}</span>
-                    </div>
-                `).join('');
-            }
-            renderItinerary();
-        };
-
         const startSync = () => {
             if (!currentUser) return;
             if (unsubscribeSync) unsubscribeSync();
@@ -483,11 +483,17 @@
             
             unsubscribeSync = onSnapshot(syncDocRef, (docSnap) => {
                 if (docSnap.exists()) {
-                    appData = { ...appData, ...docSnap.data() };
+                    const data = docSnap.data();
+                    // 合併策略：雲端資料覆蓋本地
+                    appData = { ...appData, ...data };
+                    saveLocal(); // 更新本地快取
                     updateUI();
                     if (statusText) statusText.textContent = "同步中";
                     if (statusDot) statusDot.className = "status-dot online";
-                } else { syncDataToCloud(); }
+                } else { 
+                    // 文件不存在時，上傳目前的本地資料
+                    syncDataToCloud(); 
+                }
             }, (err) => { if (statusText) statusText.textContent = "連線異常"; });
         };
 
@@ -501,7 +507,46 @@
             });
         };
 
-        // --- 全域導出函數 ---
+        const renderLibrary = (list) => {
+            const container = document.getElementById('library-list');
+            const badge = document.getElementById('saved-count-badge');
+            if (badge) badge.textContent = list.length;
+            if (!container) return;
+            if (list.length === 0) { container.innerHTML = `<p class="text-center text-gray-400 text-xs py-8 font-medium">目前無雲端備份紀錄</p>`; return; }
+            container.innerHTML = list.map(trip => `
+                <div class="flex justify-between items-center p-4 bg-white border border-gray-100 rounded-xl shadow-sm hover:border-indigo-300 transition">
+                    <div><div class="text-sm font-bold text-gray-800">${trip.tripName}</div><div class="text-[10px] text-gray-400">${trip.saveDate}</div></div>
+                    <div class="flex space-x-2 font-bold"><button onclick="loadFromLibrary('${trip.id}')" class="text-xs text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-md">載入</button><button onclick="deleteFromLibrary('${trip.id}')" class="text-xs text-red-300 px-1 font-normal">刪除</button></div>
+                </div>
+            `).join('');
+        };
+
+        // --- 啟動與驗證 ---
+        const initAuth = async () => {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (e) { console.error("驗證失敗", e); }
+        };
+
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                currentUser = user;
+                const userIdEl = document.getElementById('my-user-id');
+                if (userIdEl) userIdEl.textContent = user.uid.substring(0, 8);
+                const statusDot = document.getElementById('status-dot');
+                if (statusDot) statusDot.className = "status-dot online";
+                const statusText = document.getElementById('status-text');
+                if (statusText) statusText.textContent = "已連線";
+                startSync();
+                startLibrarySync();
+            }
+        });
+
+        // --- 全域介面導出 ---
         window.handleInputChange = () => {
             appData.inputs.startDate = document.getElementById('start-date').value;
             appData.inputs.endDate = document.getElementById('end-date').value;
@@ -650,7 +695,7 @@
         window.copyItineraryToClipboard = () => {
             const days = getDaysArray(appData.inputs.startDate, appData.inputs.endDate);
             if (days.length === 0) return alert("請先於上方設定旅行日期");
-            let txt = `✈️ AmazingTravel 行程規劃 ✈️\n🏨 住宿: ${appData.inputs.hotelName || '未定'}\n\n`;
+            let txt = `✈️ AmazingTravel 行程摘要 ✈️\n🏨 住宿: ${appData.inputs.hotelName || '未定'}\n\n`;
             days.forEach(d => {
                 txt += `【${d.display}】\n`;
                 if(d.isFirst) txt += `🛫 ${appData.inputs.departTime} | 抵達: ${appData.inputs.departLocation}\n`;
@@ -662,21 +707,8 @@
             const el = document.createElement('textarea'); el.value = txt; document.body.appendChild(el); el.select(); document.execCommand('copy'); document.body.removeChild(el); alert("摘要已複製！");
         };
 
-        // --- 啟動 ---
-        onAuthStateChanged(auth, (user) => {
-            if (user) {
-                currentUser = user;
-                const userIdEl = document.getElementById('my-user-id');
-                if (userIdEl) userIdEl.textContent = user.uid.substring(0, 8);
-                const statusDot = document.getElementById('status-dot');
-                if (statusDot) statusDot.className = "status-dot online";
-                const statusText = document.getElementById('status-text');
-                if (statusText) statusText.textContent = "已連線";
-                startSync();
-                startLibrarySync();
-            }
-        });
-
+        // 立即執行：從 LocalStorage 載入資料
+        loadLocal();
         initAuth();
     </script>
 </body>
