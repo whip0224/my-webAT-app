@@ -1,5 +1,5 @@
 // 1. 每次更新 index.html 後，請手動修改這裡的版本號 (例如 v1.0.2 -> v1.0.3)
-const CACHE_NAME = 'amazing-travel-v1.0.2';
+const CACHE_NAME = 'amazing-travel-v1.0.3';
 
 // 2. 列出需要離線快取的檔案
 const ASSETS_TO_CACHE = [
@@ -46,3 +46,4 @@ self.addEventListener('fetch', (event) => {
     })
   );
 });
+
