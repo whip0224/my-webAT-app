@@ -1,4 +1,13 @@
-// sw.js 必須包含 fetch 事件，瀏覽器才會判定為 PWA
-self.addEventListener('fetch', function(event) {
-    // 這裡可以先留空，但事件必須存在
+// sw.js
+self.addEventListener('install', (event) => {
+    console.log('Service Worker: Installed');
+});
+
+self.addEventListener('activate', (event) => {
+    console.log('Service Worker: Activated');
+});
+
+// 這是最關鍵的一段，必須有 fetch 事件
+self.addEventListener('fetch', (event) => {
+    // 這裡可以暫時不寫邏輯，但事件必須存在
 });
