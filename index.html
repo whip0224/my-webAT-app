@@ -247,10 +247,21 @@
         import { getFirestore, doc, setDoc, onSnapshot, collection, deleteDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- 核心變數與初始化 ---
-        // 重要：在 Canvas 環境中 appId 必須來自 __app_id 否則會發生 Permission Denied
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'amazing-travel-v1';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+		const appId = 'amazing-travel-v1'; // 你可以保留這個 ID 或自訂
+
+		// 請填入你從 Firebase Console 取得的真實資料
+		const firebaseConfig = {
+		  apiKey: "AIzaSyDxxxxxxxxxxxxxxxxxxxxxxxx",
+		  authDomain: "your-project-id.firebaseapp.com",
+		  projectId: "your-project-id",
+		  storageBucket: "your-project-id.firebasestorage.app",
+		  messagingSenderId: "123456789",
+		  appId: "1:123456789:web:xxxxxxxxxxx"
+		};
+
+		// GitHub Pages 不需要 Token 注入，直接設為 null
+		const initialAuthToken = null;
+
 
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
