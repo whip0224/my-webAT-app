@@ -3,54 +3,39 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AmazingTravel - 專業雲端行程管理</title>
+    <title>AmazingTravel - 雲端行程管理</title>
     
-    <!-- PWA Meta Tags -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="AmazingTravel">
     <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icon.png">
 
-    <!-- Service Worker 註冊腳本 -->
-    <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', function() {
-          if (window.location.protocol.startsWith('http')) {
-            navigator.serviceWorker.register('sw.js').catch(function(err) {
-              console.warn('PWA ServiceWorker 註冊受限：', err);
-            });
-          }
-        });
-      }
-    </script>
-
-    <!-- 載入 Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    
     <style>
         body { font-family: 'Inter', sans-serif; background-color: #f7f9fb; overscroll-behavior-y: none; }
-        .card { box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); border-radius: 1rem; }
-        .destination-card { cursor: pointer; transition: all 0.15s ease; padding: 0.75rem 1rem; border-radius: 0.5rem; border-left-width: 4px; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); background: white; }
-        .destination-card:hover { transform: translateY(-1px); background-color: #f0fdfa; }
+        .card { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); border-radius: 1rem; }
+        .destination-card { cursor: pointer; transition: all 0.15s ease; padding: 0.75rem 1rem; border-radius: 0.5rem; border-left-width: 4px; background: white; }
         .unscheduled { border-color: #f87171; }
         .scheduled { border-color: #34d399; }
         .itinerary-item { border-left: 4px solid #4f46e5; padding: 0.6rem 1rem; margin-bottom: 0.5rem; border-radius: 0.25rem; display: flex; justify-content: space-between; align-items: center; }
-        .time-tag { font-weight: bold; font-size: 0.8rem; padding: 4px 10px; border-radius: 9999px; margin-right: 0.75rem; display: inline-block; }
+        .time-tag { font-weight: bold; font-size: 0.8rem; padding: 4px 10px; border-radius: 9999px; margin-right: 0.75rem; }
         .modal { transition: opacity 0.25s ease; z-index: 100; }
         .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
         .online { background-color: #10b981; box-shadow: 0 0 5px #10b981; }
         .offline { background-color: #9ca3af; }
-        select { appearance: none; -webkit-appearance: none; }
     </style>
 </head>
 <body class="p-4 md:p-8">
 
     <div class="max-w-4xl mx-auto">
-        <!-- 頂部導航 -->
         <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 border-b pb-4">
             <div class="mb-4 md:mb-0">
                 <h1 class="text-3xl font-bold text-gray-800 tracking-tight">AmazingTravel</h1>
                 <div class="flex items-center space-x-3 mt-1">
-                    <span class="text-xs flex items-center text-gray-400 text-nowrap">
+                    <span class="text-xs flex items-center text-gray-400">
                         <span id="status-dot" class="status-dot offline"></span>
                         <span id="status-text">連線中...</span>
                     </span>
@@ -59,494 +44,179 @@
             </div>
             
             <div class="flex flex-wrap gap-2">
-                <button onclick="copyItineraryToClipboard()" class="flex items-center px-4 py-2 bg-teal-600 text-white rounded-lg shadow hover:bg-teal-700 transition text-sm font-semibold">
-                    複製文字
-                </button>
-                <button onclick="openCloudModal()" class="flex items-center px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg border border-indigo-100 hover:bg-indigo-100 transition text-sm font-bold">
-                    雲端與共享
-                </button>
-                <button onclick="openTripManagerModal()" class="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg shadow hover:bg-indigo-700 transition text-sm font-bold">
-                    行程管理 (<span id="saved-count-badge">0</span>)
-                </button>
+                <button onclick="copyItineraryToClipboard()" class="px-4 py-2 bg-teal-600 text-white rounded-lg shadow hover:bg-teal-700 transition text-sm font-semibold">複製文字</button>
+                <button onclick="openCloudModal()" class="px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg border border-indigo-100 text-sm font-bold">雲端共享</button>
+                <button onclick="openTripManagerModal()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg shadow text-sm font-bold">行程管理 (<span id="saved-count-badge">0</span>)</button>
             </div>
         </div>
 
-        <!-- 常用機場清單 -->
-        <datalist id="popular-airports">
-            <option value="香港國際機場 (HKG) T1">
-            <option value="東京成田機場 (NRT)">
-            <option value="東京羽田機場 (HND)">
-            <option value="大阪關西機場 (KIX)">
-            <option value="首爾仁川機場 (ICN)">
-            <option value="首爾金浦機場 (GMP)">
-            <option value="曼谷蘇凡納布機場 (BKK)">
-            <option value="曼谷廊曼機場 (DMK)">
-            <option value="台北桃園機場 (TPE)">
-            <option value="台北松山機場 (TSA)">
-            <option value="高雄小港機場 (KHH)">
-            <option value="福岡機場 (FUK)">
-            <option value="札幌新千歲機場 (CTS)">
-            <option value="沖繩那霸機場 (OKA)">
-            <option value="新加坡樟宜機場 (SIN)">
-            <option value="澳門國際機場 (MFM)">
-            <option value="上海浦東機場 (PVG)">
-        </datalist>
-
-        <!-- 旅行基本資料 -->
         <div class="card bg-white p-6 mb-6">
-            <h2 class="text-xl font-semibold text-indigo-700 mb-4 font-bold">旅行基本資料</h2>
+            <h2 class="text-xl font-bold text-indigo-700 mb-4">旅行基本資料</h2>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 font-bold mb-1">出發日期</label>
-                    <input type="date" id="start-date" onchange="handleInputChange()" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border focus:ring-indigo-200 focus:border-indigo-400 outline-none">
+                    <label class="block text-sm font-bold text-gray-700 mb-1">出發日期</label>
+                    <input type="date" id="start-date" onchange="handleInputChange()" class="w-full rounded-md border-gray-300 p-2 border outline-none">
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 font-bold mb-1">回程日期</label>
-                    <input type="date" id="end-date" onchange="handleInputChange()" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border focus:ring-indigo-200 focus:border-indigo-400 outline-none">
+                    <label class="block text-sm font-bold text-gray-700 mb-1">回程日期</label>
+                    <input type="date" id="end-date" onchange="handleInputChange()" class="w-full rounded-md border-gray-300 p-2 border outline-none">
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 font-bold mb-1">入住酒店</label>
-                    <div class="mt-1 flex space-x-2">
-                        <input type="text" id="hotel-name" onchange="handleInputChange()" placeholder="酒店名稱" class="block w-full rounded-md border-gray-300 shadow-sm p-2 border focus:ring-indigo-200 focus:border-indigo-400 outline-none">
-                        <button onclick="openHotelMap()" class="p-2 text-blue-500 bg-blue-50 hover:bg-blue-100 rounded-md border border-blue-200 transition shadow-sm" title="Google Map 搜尋酒店">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                            </svg>
-                        </button>
-                    </div>
+                    <label class="block text-sm font-bold text-gray-700 mb-1">入住酒店</label>
+                    <input type="text" id="hotel-name" onchange="handleInputChange()" placeholder="酒店名稱" class="w-full rounded-md border-gray-300 p-2 border outline-none">
                 </div>
             </div>
-
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div class="p-4 bg-gray-50 rounded-xl border border-gray-100 font-bold text-gray-600">
-                    <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">🛫 去程航班</label>
-                    <div class="grid grid-cols-2 gap-2 mt-2 font-normal">
-                        <input type="text" id="depart-location" list="popular-airports" placeholder="機場/城市" onchange="handleInputChange()" class="text-sm p-2 border rounded-md outline-none">
-                        <input type="time" id="depart-time" onchange="handleInputChange()" class="text-sm p-2 border rounded-md outline-none">
+                <div class="p-4 bg-gray-50 rounded-xl border border-gray-100">
+                    <label class="text-xs font-bold text-gray-500 uppercase">🛫 去程航班</label>
+                    <div class="grid grid-cols-2 gap-2 mt-2">
+                        <input type="text" id="depart-location" placeholder="機場/城市" onchange="handleInputChange()" class="text-sm p-2 border rounded-md">
+                        <input type="time" id="depart-time" onchange="handleInputChange()" class="text-sm p-2 border rounded-md">
                     </div>
                 </div>
-                <div class="p-4 bg-gray-50 rounded-xl border border-gray-100 font-bold text-gray-600">
-                    <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">🛬 回程航班</label>
-                    <div class="grid grid-cols-2 gap-2 mt-2 font-normal">
-                        <input type="text" id="return-location" list="popular-airports" placeholder="機場/城市" onchange="handleInputChange()" class="text-sm p-2 border rounded-md outline-none">
-                        <input type="time" id="return-time" onchange="handleInputChange()" class="text-sm p-2 border rounded-md outline-none">
+                <div class="p-4 bg-gray-50 rounded-xl border border-gray-100">
+                    <label class="text-xs font-bold text-gray-500 uppercase">🛬 回程航班</label>
+                    <div class="grid grid-cols-2 gap-2 mt-2">
+                        <input type="text" id="return-location" placeholder="機場/城市" onchange="handleInputChange()" class="text-sm p-2 border rounded-md">
+                        <input type="time" id="return-time" onchange="handleInputChange()" class="text-sm p-2 border rounded-md">
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- 匯率換算工具 -->
-        <div class="card bg-white p-6 mb-6 border-l-4 border-green-500">
-            <h2 class="text-xl font-semibold text-green-700 mb-4 flex items-center font-bold">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                即時匯率工具
-            </h2>
-            <div class="flex flex-col md:flex-row gap-4 items-center">
-                <div class="flex-1 w-full">
-                    <label class="text-[10px] text-gray-400 font-bold uppercase tracking-tight">持有貨幣</label>
-                    <select id="base-currency" class="w-full p-2 border rounded-md font-bold text-gray-700 bg-gray-50 outline-none">
-                        <option value="HKD">HKD - 港幣</option>
-                        <option value="TWD">TWD - 新台幣</option>
-                        <option value="JPY">JPY - 日圓</option>
-                        <option value="KRW">KRW - 韓圜</option>
-                        <option value="USD">USD - 美元</option>
-                        <option value="CNY">CNY - 人民幣</option>
-                        <option value="EUR">EUR - 歐元</option>
-                    </select>
-                </div>
-                <button onclick="swapCurrencies()" class="p-2 mt-4 bg-gray-100 rounded-full hover:bg-indigo-100 transition shadow-sm border border-gray-200" title="左右對換">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
-                </button>
-                <div class="flex-1 w-full">
-                    <label class="text-[10px] text-gray-400 font-bold uppercase tracking-tight">兌換貨幣</label>
-                    <select id="target-currency" class="w-full p-2 border rounded-md font-bold text-gray-700 bg-gray-50 outline-none">
-                        <option value="JPY" selected>JPY - 日圓</option>
-                        <option value="TWD">TWD - 新台幣</option>
-                        <option value="HKD">HKD - 港幣</option>
-                        <option value="KRW">KRW - 韓圜</option>
-                        <option value="USD">USD - 美元</option>
-                        <option value="CNY">CNY - 人民幣</option>
-                        <option value="EUR">EUR - 歐元</option>
-                    </select>
-                </div>
-                <div class="flex-1 w-full">
-                    <label class="text-[10px] text-gray-400 font-bold uppercase tracking-tight">金額</label>
-                    <input type="number" id="exchange-amount" value="1000" class="w-full p-2 border rounded-md font-mono text-indigo-700 outline-none focus:ring-1 focus:ring-green-400">
-                </div>
-                <button onclick="fetchExchangeRate()" class="bg-green-600 text-white px-6 py-2 rounded-md font-bold hover:bg-green-700 transition w-full md:w-auto self-end h-[42px] shadow-sm">換算</button>
+        <div class="card bg-white p-6 mb-8">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-bold text-gray-800">目的地清單</h2>
+                <button onclick="handleClearAllDestinations()" class="text-xs text-red-500 font-bold uppercase">清空全部</button>
             </div>
-            <div id="exchange-result" class="mt-4 hidden p-4 bg-green-50 rounded-xl border border-green-200 text-center md:text-left">
-                <span id="exchange-result-text" class="text-3xl font-black text-green-800 leading-tight tracking-tight">--</span>
-                <!-- 新增參考來源標示 -->
-                <p class="text-[10px] text-gray-400 mt-1 text-right">資料來源：ExchangeRate-API</p>
+            <div class="flex space-x-2 mb-4">
+                <input type="text" id="new-destination-name" placeholder="新增地點 (可逗號分隔)" class="flex-grow rounded-md border-gray-300 p-2 border text-sm outline-none">
+                <button onclick="addCustomDestination()" class="px-6 py-2 bg-indigo-600 text-white rounded-md text-sm font-bold shadow">新增</button>
             </div>
+            <div id="destination-list-container" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
         </div>
 
-        <!-- 目的地管理 (預設收合) -->
-        <div class="card bg-white p-6 mb-8 overflow-hidden">
-            <div class="flex justify-between items-center cursor-pointer select-none" onclick="toggleDestinationSection()">
-                <h2 class="text-xl font-semibold text-gray-800 flex items-center font-bold">
-                    目的地清單
-                    <svg id="dest-chevron" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 ml-2 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                    </svg>
-                </h2>
-                <div class="flex space-x-3 items-center" onclick="event.stopPropagation()">
-                    <label class="text-xs text-indigo-600 font-bold flex items-center cursor-pointer hover:underline text-nowrap">
-                        匯入 TXT
-                        <input type="file" id="import-txt" accept=".txt" onchange="importDestinationsFromTxt(event)" class="hidden">
-                    </label>
-                    <button onclick="handleClearAllDestinations()" class="text-xs text-red-500 font-bold uppercase tracking-tight text-nowrap">清空全部</button>
-                </div>
-            </div>
-            
-            <div id="dest-section-content" class="hidden mt-4">
-                <div class="flex space-x-2 mb-4 font-bold">
-                    <input type="text" id="new-destination-name" placeholder="新增地點 (可逗號分隔)" class="flex-grow rounded-md border-gray-300 shadow-sm p-2 border text-sm outline-none focus:ring-1 focus:ring-indigo-400">
-                    <button onclick="addCustomDestination()" class="px-6 py-2 bg-indigo-600 text-white rounded-md text-sm font-bold shadow hover:bg-indigo-700 transition">新增</button>
-                </div>
-                <div id="destination-list-container" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
-            </div>
-        </div>
-
-        <!-- 每日行程預覽 -->
         <div id="itinerary-display-area" class="space-y-6 mb-20"></div>
     </div>
 
-    <!-- 雲端共享彈窗 -->
-    <div id="cloud-modal" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-[100] hidden modal">
-        <div class="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-md mx-4 border border-indigo-100">
-            <h3 class="text-xl font-bold mb-6 text-indigo-700 text-center border-b pb-2 font-bold">雲端同步設定</h3>
-            <div class="space-y-6">
-                <div class="bg-gray-50 p-4 rounded-xl border border-gray-200">
-                    <label class="block text-sm font-bold text-gray-700 mb-2">同步模式</label>
-                    <div class="flex p-1 bg-gray-200 rounded-lg">
-                        <button id="btn-mode-private" onclick="switchSyncMode('private')" class="flex-1 py-2 text-sm font-bold rounded-md transition duration-200">各自獨立</button>
-                        <button id="btn-mode-shared" onclick="switchSyncMode('shared')" class="flex-1 py-2 text-sm font-medium rounded-md transition duration-200">資料共享</button>
-                    </div>
-                    <p id="mode-desc-text" class="text-[10px] text-gray-400 mt-2 text-center">獨立模式會將資料保存在您的私有空間。</p>
-                </div>
-                <div id="shared-input-area" class="hidden">
-                    <label class="block text-sm font-bold text-gray-700 mb-2 font-bold text-indigo-600">共享金鑰 (Share ID)</label>
-                    <div class="flex space-x-2">
-                        <input type="text" id="share-id-input" placeholder="例如: FUKUOKA2026" class="flex-grow p-2 border rounded-md font-mono uppercase outline-none focus:ring-1 focus:ring-indigo-500">
-                        <button onclick="joinSharedTrip()" class="bg-indigo-600 text-white px-6 py-2 rounded-md text-sm font-bold">加入</button>
-                    </div>
-                </div>
+    <div id="cloud-modal" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-[100] hidden">
+        <div class="bg-white p-6 rounded-2xl w-full max-w-md mx-4">
+            <h3 class="text-xl font-bold mb-4 text-center">雲端同步設定</h3>
+            <div class="flex p-1 bg-gray-200 rounded-lg mb-4">
+                <button id="btn-mode-private" onclick="switchSyncMode('private')" class="flex-1 py-2 text-sm font-bold rounded-md">各自獨立</button>
+                <button id="btn-mode-shared" onclick="switchSyncMode('shared')" class="flex-1 py-2 text-sm font-bold rounded-md">資料共享</button>
             </div>
-            <div class="mt-8 flex flex-col items-center border-t pt-4">
-                <div class="text-[10px] text-gray-400 mb-4 font-mono">
-                    您的裝置 ID: <span id="my-user-id" class="text-gray-600 font-bold">載入中...</span>
-                </div>
-                <button onclick="closeCloudModal()" class="px-12 py-2 bg-gray-100 text-gray-600 rounded-xl font-bold hover:bg-gray-200 transition">關閉</button>
+            <div id="shared-input-area" class="hidden mb-4">
+                <input type="text" id="share-id-input" placeholder="共享金鑰 (例如: TRIP2026)" class="w-full p-2 border rounded-md uppercase">
+                <button onclick="joinSharedTrip()" class="w-full mt-2 bg-indigo-600 text-white py-2 rounded-md font-bold">加入共享房間</button>
             </div>
+            <button onclick="closeCloudModal()" class="w-full py-2 bg-gray-100 text-gray-600 rounded-xl font-bold">關閉</button>
         </div>
     </div>
 
-    <!-- 行程管理中心 -->
-    <div id="trip-manager-modal" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-[100] hidden modal">
-        <div class="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-lg mx-4">
-            <h3 class="text-xl font-bold mb-4 text-indigo-700 text-center font-bold tracking-tight">行程管理中心</h3>
-            <div class="bg-indigo-50 p-4 rounded-xl mb-4 border border-indigo-100">
-                <label class="block text-xs font-bold text-indigo-600 mb-2 uppercase tracking-tight">將目前行程另存為備份</label>
-                <div class="flex space-x-2">
-                    <input type="text" id="save-trip-name" placeholder="輸入行程標題" class="flex-grow p-2 border rounded-md text-sm outline-none">
-                    <button onclick="saveToLibrary()" class="bg-indigo-600 text-white px-5 py-2 rounded-md font-bold hover:bg-indigo-700 transition">儲存</button>
-                </div>
-            </div>
-            <div class="grid grid-cols-2 gap-2 mb-6 font-bold">
-                <button onclick="exportCurrentTrip()" class="py-3 bg-gray-50 text-gray-700 rounded-xl text-xs font-bold border border-gray-200 hover:bg-gray-100 transition shadow-sm">📤 匯出 JSON</button>
-                <label class="py-3 bg-gray-50 text-gray-700 rounded-xl text-xs font-bold border border-gray-200 hover:bg-gray-100 cursor-pointer transition text-center flex items-center justify-center shadow-sm">
-                    📥 匯入 JSON
-                    <input type="file" id="import-json-file" accept=".json" onchange="importTripFromFile(event)" class="hidden">
-                </label>
-            </div>
-            <div class="max-h-60 overflow-y-auto space-y-2 border-t pt-4" id="library-list"></div>
-            <div class="mt-6 flex justify-end">
-                <button onclick="closeTripManagerModal()" class="px-8 py-2 bg-gray-100 text-gray-600 rounded-xl font-bold transition hover:bg-gray-200">關閉</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- 通用確認對話框 -->
-    <div id="confirm-modal" class="fixed inset-0 bg-gray-900 bg-opacity-80 flex items-center justify-center z-[200] hidden modal">
-        <div class="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-sm mx-4 text-center">
-            <h3 class="text-xl font-bold text-gray-800 mb-2 tracking-tight">確認執行？</h3>
-            <p id="confirm-message" class="text-gray-500 mb-6 text-sm leading-relaxed font-medium"></p>
-            <div class="flex space-x-3 font-bold">
-                <button onclick="closeConfirmModal()" class="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold transition hover:bg-gray-200">取消</button>
-                <button id="confirm-ok-btn" class="flex-1 py-3 bg-red-500 text-white rounded-xl font-bold shadow-lg shadow-red-200 transition hover:bg-red-600">確定</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- 行程細節設定彈窗 -->
-    <div id="date-selector-modal" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-[110] hidden modal">
-        <div class="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-sm mx-4 font-bold">
-            <h3 id="modal-title" class="text-lg font-bold mb-4 text-indigo-700 border-b pb-2 tracking-tight">行程細節</h3>
-            <div class="space-y-4">
-                <div class="grid grid-cols-2 gap-2">
-                    <div><label class="text-[10px] text-gray-500 font-bold uppercase">開始</label><input type="time" id="m-start-time" class="w-full p-2 border rounded-md outline-none"></div>
-                    <div><label class="text-[10px] text-gray-500 font-bold uppercase">結束</label><input type="time" id="m-end-time" class="w-full p-2 border rounded-md outline-none"></div>
-                </div>
-                <div class="grid grid-cols-2 gap-2">
-                    <div>
-                        <label class="text-[10px] text-gray-500 font-bold uppercase tracking-tight">交通</label>
-                        <select id="m-transport" class="w-full p-2 border rounded-md text-sm bg-white outline-none">
-                            <option value="地鐵/火車">地鐵/火車</option><option value="巴士">巴士</option><option value="步行">步行</option>
-                            <option value="計程車/Uber">計程車/Uber</option><option value="自駕">自駕</option><option value="渡輪">渡輪</option>
-                        </select>
-                    </div>
-                    <div><label class="text-[10px] text-gray-500 font-bold uppercase tracking-tight">人均預算</label><input type="text" id="m-cost" class="w-full p-2 border rounded-md text-sm outline-none"></div>
-                </div>
-                <div><label class="text-[10px] text-gray-500 font-bold uppercase tracking-tight">選擇日期</label><div id="m-date-options" class="mt-1 space-y-1 max-h-32 overflow-y-auto border rounded-md p-1 bg-gray-50 font-bold text-gray-700"></div></div>
-            </div>
-            <div class="mt-6 flex justify-between items-center border-t pt-4">
-                <button onclick="unassignDestination()" class="text-red-500 text-sm font-bold hover:underline">取消排定</button>
-                <div class="space-x-2 flex">
-                    <button onclick="closeDateModal()" class="px-4 py-2 text-gray-400 font-medium">取消</button>
-                    <button onclick="saveDateAssignment()" class="px-6 py-2 bg-indigo-600 text-white rounded-lg font-bold shadow-sm hover:bg-indigo-700 transition">確認</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Firebase SDK & Logic -->
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, onSnapshot, collection, deleteDoc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot, getDoc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
-        // --- 初始化參數 ---
-        const firebaseConfig = JSON.parse(__firebase_config);
+        // --- Firebase Config (請替換成您自己的配置) ---
+        const firebaseConfig = { /* 您的 Firebase Config */ };
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'amazing-travel-asia-pro-v16';
+        const appId = 'amazing-travel-v1';
 
+        // --- 全域變數 ---
         let currentUser = null;
-        let currentMode = 'private'; 
+        let currentMode = 'private';
         let currentShareId = '';
         let unsubscribeSync = null;
-        let unsubscribeLibrary = null;
+        const LOCAL_KEY = 'amazing_travel_data';
 
-        const LOCAL_STORAGE_KEY = 'amazing_travel_local_v1';
-
-        // 預設資料
         let appData = {
             inputs: { startDate: '', endDate: '', hotelName: '', departLocation: '', departTime: '10:00', returnLocation: '', returnTime: '18:30' },
             destinations: [],
-            dailyOrder: {} 
+            dailyOrder: {}
         };
 
-        let activeEditingName = null;
+        // --- 核心函式 ---
 
-        // --- 本地持久化 (LocalStorage) 函式 ---
-        function saveLocal() {
-            try {
-                localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(appData));
-            } catch(e) { console.warn("Local Save Error", e); }
-        }
-
-        function loadLocal() {
-            try {
-                const data = localStorage.getItem(LOCAL_STORAGE_KEY);
-                if (data) {
-                    const parsed = JSON.parse(data);
-                    // 合併以確保新欄位存在
-                    appData = { ...appData, ...parsed };
-                    updateUI(); // 立即更新畫面
-                }
-            } catch(e) { console.warn("Local Load Error", e); }
-        }
-
-        // --- 核心工具 ---
-        function getDaysArray(s, e) {
-            if (!s || !e) return [];
-            const start = new Date(s), end = new Date(e);
-            if (isNaN(start) || isNaN(end) || start > end) return [];
-            const days = [];
-            let curr = new Date(start);
-            while (curr <= end) {
-                const iso = curr.toISOString().split('T')[0];
-                days.push({ 
-                    date: iso, 
-                    display: curr.toLocaleDateString('zh-TW', { month: 'short', day: 'numeric', weekday: 'short' }), 
-                    isFirst: iso === s, 
-                    isLast: iso === e 
-                });
-                curr.setDate(curr.getDate() + 1);
-            }
-            return days;
-        }
-
-        // --- 雲端與資料流 ---
-        const syncDataToCloud = async () => {
-            saveLocal(); // 同步寫入本地
-            if (!currentUser) return;
-            let syncDocRef;
-            if (currentMode === 'private') {
-                syncDocRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'trips', 'active');
-            } else {
-                if (!currentShareId) return;
-                syncDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'shared_trips', currentShareId);
-            }
-            try { await setDoc(syncDocRef, appData); } catch (err) {}
+        // 1. 本地儲存與讀取 (解決重新整理消失的問題)
+        const saveLocal = () => {
+            localStorage.setItem(LOCAL_KEY, JSON.stringify(appData));
         };
 
-        const updateUI = () => {
-            const fields = { 'start-date': 'startDate', 'end-date': 'endDate', 'hotel-name': 'hotelName', 'depart-location': 'departLocation', 'depart-time': 'departTime', 'return-location': 'returnLocation', 'return-time': 'returnTime' };
-            Object.entries(fields).forEach(([id, key]) => {
-                const el = document.getElementById(id);
-                if (el) el.value = appData.inputs[key] || '';
-            });
+        const loadLocal = () => {
+            const saved = localStorage.getItem(LOCAL_KEY);
+            if (saved) {
+                appData = JSON.parse(saved);
+                updateUI();
+                console.log("Local data loaded.");
+            }
+        };
+
+        // 2. UI 更新渲染
+        window.updateUI = () => {
+            document.getElementById('start-date').value = appData.inputs.startDate;
+            document.getElementById('end-date').value = appData.inputs.endDate;
+            document.getElementById('hotel-name').value = appData.inputs.hotelName;
+            document.getElementById('depart-location').value = appData.inputs.departLocation;
+            document.getElementById('depart-time').value = appData.inputs.departTime;
+            document.getElementById('return-location').value = appData.inputs.returnLocation;
+            document.getElementById('return-time').value = appData.inputs.returnTime;
 
             const container = document.getElementById('destination-list-container');
-            if (container) {
-                container.innerHTML = appData.destinations.map(d => `
-                    <div class="destination-card ${d.scheduled ? 'scheduled' : 'unscheduled'}" onclick="openDateModal('${d.name.replace(/'/g, "\\'")}')">
-                        <div class="flex justify-between items-center w-full">
-                            <span class="truncate font-bold text-gray-700 pr-1">${d.name}</span>
-                            <div class="flex items-center space-x-1 shrink-0" onclick="event.stopPropagation()">
-                                 <button onclick="openGoogleMaps('${d.name.replace(/'/g, "\\'")}')" class="p-1.5 text-blue-500 hover:bg-blue-50 rounded transition" title="地圖">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                                 </button>
-                                 <button onclick="removeDestination('${d.name.replace(/'/g, "\\'")}')" class="p-1.5 text-red-400 hover:bg-red-50 rounded transition">✕</button>
-                            </div>
-                        </div>
-                        <span class="text-[10px] text-gray-400 mt-1 font-bold tracking-tight">${d.scheduled ? '📅 ' + d.scheduled.date : '未安排日期'}</span>
+            container.innerHTML = appData.destinations.map(d => `
+                <div class="destination-card ${d.scheduled ? 'scheduled' : 'unscheduled'}">
+                    <div class="flex justify-between items-center">
+                        <span class="font-bold">${d.name}</span>
+                        <button onclick="removeDestination('${d.name}')" class="text-red-400">✕</button>
                     </div>
-                `).join('');
-            }
+                    <span class="text-[10px] text-gray-400">${d.scheduled ? '📅 ' + d.scheduled.date : '未安排'}</span>
+                </div>
+            `).join('');
             renderItinerary();
         };
 
-        const renderItinerary = () => {
-            const area = document.getElementById('itinerary-display-area');
-            if (!area) return;
-            const days = getDaysArray(appData.inputs.startDate, appData.inputs.endDate);
-            if (days.length === 0) { area.innerHTML = `<div class="p-10 text-center text-gray-400 bg-white rounded-2xl border-2 border-dashed border-gray-200 font-bold">請先於上方設定旅行日期</div>`; return; }
+        // 3. 雲端同步邏輯 (改善覆蓋問題)
+        const syncToCloud = async () => {
+            saveLocal();
+            if (!currentUser) return;
+            const ref = (currentMode === 'private') 
+                ? doc(db, 'trips', currentUser.uid)
+                : doc(db, 'shared', currentShareId);
             
-            area.innerHTML = days.map(day => {
-                const dayEvents = appData.destinations.filter(d => d.scheduled && d.scheduled.date === day.date);
-                if (!appData.dailyOrder[day.date]) appData.dailyOrder[day.date] = dayEvents.map(e => e.name);
-                else {
-                    const currentNames = dayEvents.map(e => e.name);
-                    appData.dailyOrder[day.date] = appData.dailyOrder[day.date].filter(n => currentNames.includes(n));
-                    currentNames.forEach(n => { if(!appData.dailyOrder[day.date].includes(n)) appData.dailyOrder[day.date].push(n); });
-                }
-                const sortedEvents = appData.dailyOrder[day.date].map(name => dayEvents.find(e => e.name === name)).filter(Boolean);
-
-                let html = `<div class="card bg-white p-5 border-l-8 border-indigo-600 shadow-sm"><h3 class="text-xl font-bold text-gray-800 mb-5 font-bold">${day.display}</h3><div class="space-y-3 font-bold">`;
-                if (day.isFirst) html += `<div class="itinerary-item border-blue-400 bg-blue-50/50"><span class="text-sm font-bold text-blue-800">🛫 ${appData.inputs.departTime || '00:00'} | 抵達：${appData.inputs.departLocation || '目的地'}</span></div>`;
-                if (sortedEvents.length === 0) { html += `<p class="text-[10px] text-gray-300 italic pl-2 font-medium">本日無景點排程</p>`; } else {
-                    sortedEvents.forEach((ev, idx) => {
-                        html += `
-                        <div class="itinerary-item bg-gray-50 border-indigo-200">
-                            <div class="flex flex-col flex-grow">
-                                <div class="flex items-center">
-                                    <span class="time-tag bg-indigo-600 text-white shadow-sm">${ev.scheduled.start}-${ev.scheduled.end}</span>
-                                    <span class="font-bold text-gray-700">${ev.name}</span>
-                                    <button onclick="openGoogleMaps('${ev.name.replace(/'/g, "\\'")}')" class="ml-2 text-blue-400 hover:text-blue-600 transition"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg></button>
-                                </div>
-                                <div class="text-[10px] text-gray-400 mt-1 pl-2 font-medium tracking-tight leading-tight">🚗 ${ev.scheduled.transport} | 💰 預算: ${ev.scheduled.cost || '免費'}</div>
-                            </div>
-                            <div class="flex flex-col space-y-1">
-                                <button onclick="moveItem('${day.date}', '${ev.name.replace(/'/g, "\\'")}', -1)" class="p-1 hover:bg-gray-200 rounded text-gray-400 ${idx===0?'opacity-0 cursor-default':'opacity-100'}">▲</button>
-                                <button onclick="moveItem('${day.date}', '${ev.name.replace(/'/g, "\\'")}', 1)" class="p-1 hover:bg-gray-200 rounded text-gray-400 ${idx===sortedEvents.length-1?'opacity-0 cursor-default':'opacity-100'}">▼</button>
-                            </div>
-                        </div>`;
-                    });
-                }
-                if (day.isLast) html += `<div class="itinerary-item border-orange-400 bg-orange-50/50"><span class="text-sm font-bold text-orange-800">🛬 ${appData.inputs.returnTime || '00:00'} | 離開：${appData.inputs.returnLocation || '出發地'}</span></div>`;
-                html += `</div></div>`; return html;
-            }).join('');
+            try {
+                await setDoc(ref, appData);
+            } catch(e) { console.error("Sync error", e); }
         };
 
         const startSync = () => {
             if (!currentUser) return;
             if (unsubscribeSync) unsubscribeSync();
-            const modeBadge = document.getElementById('mode-badge');
-            const statusText = document.getElementById('status-text');
-            const statusDot = document.getElementById('status-dot');
 
-            let syncDocRef;
-            if (currentMode === 'private') {
-                syncDocRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'trips', 'active');
-                if (modeBadge) { modeBadge.textContent = "個人雲端"; modeBadge.className = "px-2 py-0.5 bg-gray-100 text-gray-500 text-[10px] rounded uppercase font-bold"; }
-            } else {
-                if (!currentShareId) return;
-                syncDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'shared_trips', currentShareId);
-                if (modeBadge) { modeBadge.textContent = `共享: ${currentShareId}`; modeBadge.className = "px-2 py-0.5 bg-indigo-600 text-white text-[10px] rounded uppercase font-bold shadow-md"; }
-            }
-            
-            unsubscribeSync = onSnapshot(syncDocRef, (docSnap) => {
-                if (docSnap.exists()) {
-                    const data = docSnap.data();
-                    // 合併策略：雲端資料覆蓋本地
-                    appData = { ...appData, ...data };
-                    saveLocal(); // 更新本地快取
+            const ref = (currentMode === 'private') 
+                ? doc(db, 'trips', currentUser.uid)
+                : doc(db, 'shared', currentShareId);
+
+            unsubscribeSync = onSnapshot(ref, (snap) => {
+                if (snap.exists()) {
+                    // 只有當雲端有資料時才合併，不直接覆蓋
+                    appData = snap.data();
+                    saveLocal();
                     updateUI();
-                    if (statusText) statusText.textContent = "同步中";
-                    if (statusDot) statusDot.className = "status-dot online";
-                } else { 
-                    // 文件不存在時，上傳目前的本地資料
-                    syncDataToCloud(); 
+                    document.getElementById('status-text').textContent = "已同步";
+                    document.getElementById('status-dot').className = "status-dot online";
+                } else {
+                    // 雲端是空的，把本地的推上去
+                    syncToCloud();
                 }
-            }, (err) => { if (statusText) statusText.textContent = "連線異常"; });
-        };
-
-        const startLibrarySync = () => {
-            if (!currentUser) return;
-            const libColl = collection(db, 'artifacts', appId, 'users', currentUser.uid, 'library');
-            unsubscribeLibrary = onSnapshot(libColl, (snap) => {
-                const list = [];
-                snap.forEach(d => list.push({ id: d.id, ...d.data() }));
-                renderLibrary(list);
             });
         };
 
-        const renderLibrary = (list) => {
-            const container = document.getElementById('library-list');
-            const badge = document.getElementById('saved-count-badge');
-            if (badge) badge.textContent = list.length;
-            if (!container) return;
-            if (list.length === 0) { container.innerHTML = `<p class="text-center text-gray-400 text-xs py-8 font-medium">目前無雲端備份紀錄</p>`; return; }
-            container.innerHTML = list.map(trip => `
-                <div class="flex justify-between items-center p-4 bg-white border border-gray-100 rounded-xl shadow-sm hover:border-indigo-300 transition">
-                    <div><div class="text-sm font-bold text-gray-800">${trip.tripName}</div><div class="text-[10px] text-gray-400">${trip.saveDate}</div></div>
-                    <div class="flex space-x-2 font-bold"><button onclick="loadFromLibrary('${trip.id}')" class="text-xs text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-md">載入</button><button onclick="deleteFromLibrary('${trip.id}')" class="text-xs text-red-300 px-1 font-normal">刪除</button></div>
-                </div>
-            `).join('');
-        };
+        // --- 監聽事件 ---
 
-        // --- 啟動與驗證 ---
-        const initAuth = async () => {
-            try {
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
-                }
-            } catch (e) { console.error("驗證失敗", e); }
-        };
-
-        onAuthStateChanged(auth, (user) => {
-            if (user) {
-                currentUser = user;
-                const userIdEl = document.getElementById('my-user-id');
-                if (userIdEl) userIdEl.textContent = user.uid.substring(0, 8);
-                const statusDot = document.getElementById('status-dot');
-                if (statusDot) statusDot.className = "status-dot online";
-                const statusText = document.getElementById('status-text');
-                if (statusText) statusText.textContent = "已連線";
-                startSync();
-                startLibrarySync();
-            }
-        });
-
-        // --- 全域介面導出 ---
+        // 監聽輸入框變動
         window.handleInputChange = () => {
             appData.inputs.startDate = document.getElementById('start-date').value;
             appData.inputs.endDate = document.getElementById('end-date').value;
@@ -555,161 +225,31 @@
             appData.inputs.departTime = document.getElementById('depart-time').value;
             appData.inputs.returnLocation = document.getElementById('return-location').value;
             appData.inputs.returnTime = document.getElementById('return-time').value;
-            syncDataToCloud(); renderItinerary();
-        };
-        window.toggleDestinationSection = () => {
-            const content = document.getElementById('dest-section-content');
-            const chevron = document.getElementById('dest-chevron');
-            if (content && chevron) { content.classList.toggle('hidden'); chevron.classList.toggle('rotate-180'); }
-        };
-        window.addCustomDestination = () => {
-            const input = document.getElementById('new-destination-name');
-            if (!input) return;
-            const names = input.value.split(/[,\uff0c]/).map(n => n.trim()).filter(n => n);
-            names.forEach(n => { if (!appData.destinations.find(d => d.name === n)) appData.destinations.push({ name: n, scheduled: null }); });
-            input.value = ''; syncDataToCloud(); updateUI();
-        };
-        window.handleClearAllDestinations = () => {
-            window.showConfirm("確定要清空目的地清單上的所有地點嗎？", () => {
-                appData.destinations = []; syncDataToCloud(); updateUI();
-            });
-        };
-        window.removeDestination = (name) => { appData.destinations = appData.destinations.filter(d => d.name !== name); syncDataToCloud(); updateUI(); };
-        window.openGoogleMaps = (name) => { window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name)}`, '_blank'); };
-        window.openHotelMap = () => {
-            const h = document.getElementById('hotel-name').value.trim();
-            if (h) window.openGoogleMaps(h);
-            else alert("請先輸入酒店名稱以搜尋地圖");
-        };
-        window.importDestinationsFromTxt = (event) => {
-            const file = event.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const lines = e.target.result.split(/\r?\n/).map(l => l.trim()).filter(l => l);
-                lines.forEach(n => { if (!appData.destinations.find(d => d.name === n)) appData.destinations.push({ name: n, scheduled: null }); });
-                syncDataToCloud(); updateUI(); event.target.value = '';
-            };
-            reader.readAsText(file);
-        };
-        window.moveItem = (date, name, direction) => {
-            const arr = appData.dailyOrder[date];
-            if (!arr) return;
-            const idx = arr.indexOf(name);
-            const newIdx = idx + direction;
-            if (newIdx >= 0 && newIdx < arr.length) { [arr[idx], arr[newIdx]] = [arr[newIdx], arr[idx]]; syncDataToCloud(); updateUI(); }
-        };
-        window.swapCurrencies = () => {
-            const b = document.getElementById('base-currency');
-            const t = document.getElementById('target-currency');
-            const tmp = b.value; b.value = t.value; t.value = tmp;
-            window.fetchExchangeRate();
-        };
-        window.fetchExchangeRate = async () => {
-            const b = document.getElementById('base-currency').value;
-            const t = document.getElementById('target-currency').value;
-            const a = document.getElementById('exchange-amount').value;
-            const resEl = document.getElementById('exchange-result');
-            const textEl = document.getElementById('exchange-result-text');
-            if (resEl && textEl) {
-                resEl.classList.remove('hidden');
-                textEl.textContent = "換算中...";
-                try {
-                    const r = await fetch(`https://api.exchangerate-api.com/v4/latest/${b}`);
-                    const d = await r.json();
-                    const rate = d.rates[t];
-                    textEl.innerHTML = `<span class='text-[10px] text-gray-500 tracking-tight uppercase font-bold'>換算結果參考：</span><br/>${a} ${b} ≈ ${(a * rate).toLocaleString(undefined, {minimumFractionDigits: 2})} ${t}`;
-                } catch(e) { textEl.textContent = "匯率請求失敗"; }
-            }
-        };
-        window.exportCurrentTrip = () => {
-            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(appData));
-            const dl = document.createElement('a');
-            dl.setAttribute("href", dataStr);
-            dl.setAttribute("download", `TripPlan_${new Date().toISOString().slice(0,10)}.json`);
-            document.body.appendChild(dl); dl.click(); dl.remove();
-        };
-        window.importTripFromFile = (event) => {
-            const file = event.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                try {
-                    const json = JSON.parse(e.target.result);
-                    if (json.inputs && json.destinations) { appData = json; syncDataToCloud(); updateUI(); alert("行程匯入成功！"); }
-                } catch (err) { alert("檔案讀取錯誤"); }
-                event.target.value = '';
-            };
-            reader.readAsText(file);
-        };
-        window.openCloudModal = () => document.getElementById('cloud-modal').classList.remove('hidden');
-        window.closeCloudModal = () => document.getElementById('cloud-modal').classList.add('hidden');
-        window.openTripManagerModal = () => document.getElementById('trip-manager-modal').classList.remove('hidden');
-        window.closeTripManagerModal = () => document.getElementById('trip-manager-modal').classList.add('hidden');
-        window.openDateModal = (name) => {
-            activeEditingName = name;
-            const dest = appData.destinations.find(d => d.name === name);
-            if (!dest) return;
-            document.getElementById('modal-title').textContent = name;
-            document.getElementById('m-start-time').value = dest.scheduled?.start || '10:00';
-            document.getElementById('m-end-time').value = dest.scheduled?.end || '12:00';
-            document.getElementById('m-transport').value = dest.scheduled?.transport || '地鐵/火車';
-            document.getElementById('m-cost').value = dest.scheduled?.cost || '';
-            const days = getDaysArray(appData.inputs.startDate, appData.inputs.endDate);
-            const container = document.getElementById('m-date-options');
-            if (container) {
-                container.innerHTML = days.map(d => `<label class="flex items-center p-3 border rounded-xl hover:bg-indigo-50 cursor-pointer mb-2 bg-white transition"><input type="radio" name="m-date" value="${d.date}" ${dest.scheduled?.date === d.date ? 'checked' : ''} class="mr-3 accent-indigo-600 outline-none"><span class="text-sm font-bold text-gray-700">${d.display}</span></label>`).join('');
-            }
-            document.getElementById('date-selector-modal').classList.remove('hidden');
-        };
-        window.closeDateModal = () => document.getElementById('date-selector-modal').classList.add('hidden');
-        window.saveDateAssignment = () => {
-            const selectedDate = document.querySelector('input[name="m-date"]:checked')?.value;
-            if (!selectedDate) return;
-            const dest = appData.destinations.find(d => d.name === activeEditingName);
-            if (dest) {
-                dest.scheduled = { date: selectedDate, start: document.getElementById('m-start-time').value, end: document.getElementById('m-end-time').value, transport: document.getElementById('m-transport').value, cost: document.getElementById('m-cost').value };
-                syncDataToCloud(); updateUI(); closeDateModal();
-            }
-        };
-        window.unassignDestination = () => { const d = appData.destinations.find(x => x.name === activeEditingName); if (d) d.scheduled = null; syncDataToCloud(); updateUI(); closeDateModal(); };
-        window.switchSyncMode = (mode) => {
-            currentMode = mode;
-            document.getElementById('btn-mode-private').className = mode === 'private' ? "flex-1 py-2 text-sm font-bold rounded-md bg-white shadow-sm text-indigo-700 border" : "flex-1 py-2 text-sm font-medium rounded-md text-gray-500";
-            document.getElementById('btn-mode-shared').className = mode === 'shared' ? "flex-1 py-2 text-sm font-bold rounded-md bg-white shadow-sm text-indigo-700 border" : "flex-1 py-2 text-sm font-medium rounded-md text-gray-500";
-            document.getElementById('shared-input-area').className = mode === 'shared' ? "" : "hidden";
-            if (mode === 'private') startSync();
-        };
-        window.joinSharedTrip = () => { const val = document.getElementById('share-id-input').value.trim().toUpperCase(); if (val) { currentShareId = val; startSync(); closeCloudModal(); } };
-        window.saveToLibrary = async () => {
-            const n = document.getElementById('save-trip-name').value.trim();
-            if (!n || !currentUser) return;
-            const tripId = `trip_${Date.now()}`;
-            await setDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'library', tripId), { tripName: n, saveDate: new Date().toLocaleString(), data: JSON.parse(JSON.stringify(appData)) });
-            document.getElementById('save-trip-name').value = ''; alert("已備份至雲端庫清單");
-        };
-        window.loadFromLibrary = (id) => { window.showConfirm("載入備份將覆蓋目前畫面上的一切變動，確定嗎？", async () => { const snap = await getDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'library', id)); if (snap.exists()) { appData = snap.data().data; syncDataToCloud(); closeTripManagerModal(); } }); };
-        window.deleteFromLibrary = (id) => { window.showConfirm("確定要永久刪除備份嗎？", async () => { await deleteDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'library', id)); }); };
-        window.showConfirm = (msg, onOk) => { const m = document.getElementById('confirm-modal'); const msgEl = document.getElementById('confirm-message'); const okBtn = document.getElementById('confirm-ok-btn'); if (m && msgEl && okBtn) { msgEl.textContent = msg; m.classList.remove('hidden'); okBtn.onclick = () => { onOk(); m.classList.add('hidden'); }; } };
-        window.closeConfirmModal = () => document.getElementById('confirm-modal').classList.add('hidden');
-        window.copyItineraryToClipboard = () => {
-            const days = getDaysArray(appData.inputs.startDate, appData.inputs.endDate);
-            if (days.length === 0) return alert("請先於上方設定旅行日期");
-            let txt = `✈️ AmazingTravel 行程摘要 ✈️\n🏨 住宿: ${appData.inputs.hotelName || '未定'}\n\n`;
-            days.forEach(d => {
-                txt += `【${d.display}】\n`;
-                if(d.isFirst) txt += `🛫 ${appData.inputs.departTime} | 抵達: ${appData.inputs.departLocation}\n`;
-                const events = appData.destinations.filter(e => e.scheduled && e.scheduled.date === d.date);
-                events.forEach(e => txt += `⏰ ${e.scheduled.start}-${e.scheduled.end} | ${e.name} [${e.scheduled.transport}]\n`);
-                if(d.isLast) txt += `🛬 ${appData.inputs.returnTime} | 離開: ${appData.inputs.returnLocation}\n`;
-                txt += '\n';
-            });
-            const el = document.createElement('textarea'); el.value = txt; document.body.appendChild(el); el.select(); document.execCommand('copy'); document.body.removeChild(el); alert("摘要已複製！");
+            syncToCloud();
+            renderItinerary();
         };
 
-        // 立即執行：從 LocalStorage 載入資料
-        loadLocal();
-        initAuth();
+        // 監聽 App 切換/關閉 (強制存檔)
+        window.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden') {
+                saveLocal();
+                syncToCloud();
+            }
+        });
+
+        // 啟動流程
+        loadLocal(); // 1. 先讀本地
+        signInAnonymously(auth).then(cred => {
+            currentUser = cred.user;
+            startSync(); // 2. 後連雲端
+        });
+
+        // 輔助渲染函式 (與您之前的 logic 相同)
+        function renderItinerary() { /* 這裡放入您的 renderItinerary 邏輯 */ }
+        window.addCustomDestination = () => { /* 新增邏輯 */ };
+        window.removeDestination = (name) => { /* 刪除邏輯 */ };
+        // ... 其他 UI 函式 ...
+
     </script>
 </body>
 </html>
