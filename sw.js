@@ -1,53 +1,50 @@
-// sw.js - Service Worker
+// sw.js - AmazingTravel PWA Service Worker
 
-// 1. 修改這裡的版本號 (例如 v1 -> v2) 來強制使用者更新
-const CACHE_NAME = 'amazing-travel-v2';
+const CACHE_NAME = 'amazing-travel-v3'; 
 
-// 2. 指定要快取的檔案
 const ASSETS_TO_CACHE = [
-  './',                // 根目錄
-  './index.html',      // 主程式
-  './manifest.json',   // PWA 設定檔
-  // 如果你有放 icon 圖檔，也要加進來，例如：
-  // './icon-192.png',
-  // './icon-512.png'
+  './',
+  './index.html',
+  './manifest.json',
+  './airports.js' // 確保這個檔案存在於根目錄
 ];
 
-// 安裝 Service Worker
+// 安裝階段
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('SW: 快取檔案中...');
-      return cache.addAll(ASSETS_TO_CACHE);
+      console.log('SW: 正在預先快取核心檔案');
+      // 使用 map 逐個加入，避免其中一個檔案遺失導致全部失敗
+      return Promise.all(
+        ASSETS_TO_CACHE.map(url => {
+          return cache.add(url).catch(err => console.warn(`SW: 無法快取檔案 ${url}:`, err));
+        })
+      );
     })
   );
-  // 強制立即接管頁面
   self.skipWaiting();
 });
 
-// 啟動 Service Worker (清除舊快取)
+// 啟動與清理舊快取
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keyList) => {
       return Promise.all(
         keyList.map((key) => {
-          // 如果發現舊版本的快取 (例如 v1)，就刪除它
           if (key !== CACHE_NAME) {
-            console.log('SW: 移除舊快取', key);
+            console.log('SW: 清除過期快取版本', key);
             return caches.delete(key);
           }
         })
       );
     })
   );
-  // 讓 PWA 立即控制所有打開的分頁
   return self.clients.claim();
 });
 
-// 攔截網路請求 (Network First, fallback to Cache)
-// 策略：優先用網路讀取最新版，沒網路才用快取
+// 請求攔截
 self.addEventListener('fetch', (event) => {
-  // 忽略非 GET 請求或外部連結 (例如 Google Maps / Firebase / API)
+  // 僅攔截同源的 GET 請求
   if (event.request.method !== 'GET' || !event.request.url.startsWith(self.location.origin)) {
     return;
   }
@@ -55,7 +52,7 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        // 網路請求成功，複製一份進快取，然後回傳
+        // 請求成功：更新快取並回傳
         const responseClone = response.clone();
         caches.open(CACHE_NAME).then((cache) => {
           cache.put(event.request, responseClone);
@@ -63,8 +60,15 @@ self.addEventListener('fetch', (event) => {
         return response;
       })
       .catch(() => {
-        // 網路失敗 (離線)，回傳快取內容
-        return caches.match(event.request);
+        // 請求失敗 (離線)：嘗試從快取讀取
+        return caches.match(event.request).then((cachedResponse) => {
+          if (cachedResponse) return cachedResponse;
+          
+          // 如果連快取都沒有 (例如第一次打開就沒網路)
+          if (event.request.mode === 'navigate') {
+            return caches.match('./index.html');
+          }
+        });
       })
   );
 });

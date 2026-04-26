@@ -10,13 +10,16 @@
     <meta name="theme-color" content="#4f46e5">
 
     <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', function() {
-          if (window.location.protocol.startsWith('http')) {
-            navigator.serviceWorker.register('sw.js').catch(err => console.warn('PWA SW Fail:', err));
-          }
-        });
-      }
+		if ('serviceWorker' in navigator) {
+		  window.addEventListener('load', function() {
+			if (window.location.protocol.startsWith('http')) {
+			  // 關鍵修改：加入 { type: 'module' }
+			  navigator.serviceWorker.register('sw.js', { type: 'module' })
+				.then(reg => console.log('SW Registered with Module support'))
+				.catch(err => console.warn('PWA SW Fail:', err));
+			}
+		  });
+		}
     </script>
 
     <script src="https://cdn.tailwindcss.com"></script>
@@ -79,18 +82,35 @@
                     </div>
                 </div>
             </div>
-            <div class="grid grid-cols-2 gap-3">
-                <div class="bg-gray-50 p-3 rounded">
-                    <label class="text-[10px] font-bold text-gray-400 uppercase block mb-1">Departure 🛫</label>
-                    <input type="text" id="depart-location" list="popular-airports" placeholder="機場/城市" onchange="window.handleInputChange()" class="w-full p-1 border rounded text-sm mb-1 outline-none">
-                    <input type="time" id="depart-time" onchange="window.handleInputChange()" class="w-full p-1 border rounded text-sm outline-none">
-                </div>
-                <div class="bg-gray-50 p-3 rounded">
-                    <label class="text-[10px] font-bold text-gray-400 uppercase block mb-1">Return 🛬</label>
-                    <input type="text" id="return-location" list="popular-airports" placeholder="機場/城市" onchange="window.handleInputChange()" class="w-full p-1 border rounded text-sm mb-1 outline-none">
-                    <input type="time" id="return-time" onchange="window.handleInputChange()" class="w-full p-1 border rounded text-sm outline-none">
-                </div>
-            </div>
+			
+			
+			<div class="bg-gray-50 p-3 rounded">
+				<label class="text-[10px] font-bold text-gray-400 uppercase block mb-1">Departure 🛫</label>
+				<div class="grid grid-cols-2 gap-1 mb-1">
+					<select id="depart-country" onchange="window.updateAirportOptions('depart')" class="p-1 border rounded text-xs outline-none bg-white">
+						<option value="">選擇國家</option>
+					</select>
+					<select id="depart-location" onchange="window.handleInputChange()" class="p-1 border rounded text-xs outline-none bg-white">
+						<option value="">選擇機場</option>
+					</select>
+				</div>
+				<input type="time" id="depart-time" onchange="window.handleInputChange()" class="w-full p-1 border rounded text-sm outline-none">
+			</div>
+
+			<div class="bg-gray-50 p-3 rounded">
+				<label class="text-[10px] font-bold text-gray-400 uppercase block mb-1">Return 🛬</label>
+				<div class="grid grid-cols-2 gap-1 mb-1">
+					<select id="return-country" onchange="window.updateAirportOptions('return')" class="p-1 border rounded text-xs outline-none bg-white">
+						<option value="">選擇國家</option>
+					</select>
+					<select id="return-location" onchange="window.handleInputChange()" class="p-1 border rounded text-xs outline-none bg-white">
+						<option value="">選擇機場</option>
+					</select>
+				</div>
+				<input type="time" id="return-time" onchange="window.handleInputChange()" class="w-full p-1 border rounded text-sm outline-none">
+			</div>
+			
+			
         </div>
 
         <datalist id="popular-airports">
@@ -234,15 +254,14 @@
         </div>
     </div>
 
-    <script type="module">
+	<script type="module">
+        import airportData from './airports.js';
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, onSnapshot, collection, deleteDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- 核心變數與初始化 ---
         const appId = 'amazing-travel-v1';
-
-        // 請填入你從 Firebase Console 取得的真實資料
         const firebaseConfig = {
             apiKey: "AIzaSyD-ZzGy8A0UGq-zNWUnQtyEK0L0ynSOVKU",
             authDomain: "amazingtravel-whip0224.firebaseapp.com",
@@ -254,7 +273,6 @@
         };
 
         const initialAuthToken = null;
-
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
@@ -265,13 +283,41 @@
         let currentShareId = '';
         let unsubscribeSync = null;
 
-        // 資料狀態
         let appData = {
             inputs: { startDate: '', endDate: '', hotelName: '', departLocation: '', departTime: '10:00', returnLocation: '', returnTime: '18:00' },
             destinations: [], 
             dailyOrder: {} 
         };
         let activeEditName = null;
+
+        // --- 機場聯動邏輯 ---
+        window.initCountrySelects = () => {
+            const countries = airportData.map(item => item.country);
+            ['depart', 'return'].forEach(type => {
+                const el = document.getElementById(`${type}-country`);
+                if (el) {
+                    el.innerHTML = '<option value="">選擇國家</option>' + 
+                        countries.map(c => `<option value="${c}">${c}</option>`).join('');
+                }
+            });
+        };
+
+        window.updateAirportOptions = (type, preSelected = '') => {
+            const countryVal = document.getElementById(`${type}-country`).value;
+            const airportSelect = document.getElementById(`${type}-location`);
+            if (!airportSelect) return;
+
+            if (!countryVal) {
+                airportSelect.innerHTML = '<option value="">選擇機場</option>';
+                return;
+            }
+
+            const data = airportData.find(item => item.country === countryVal);
+            const options = data.airports.map(a => `<option value="${a}" ${a === preSelected ? 'selected' : ''}>${a}</option>`).join('');
+            airportSelect.innerHTML = '<option value="">選擇機場</option>' + options;
+            
+            if (!preSelected) window.handleInputChange();
+        };
 
         // --- 輔助函式 ---
         const safeSet = (id, property, value) => {
@@ -303,7 +349,17 @@
         };
 
         const render = () => {
-            // 更新基本資料欄位
+            ['depart', 'return'].forEach(type => {
+                const savedLoc = appData.inputs[`${type}Location`];
+                if (savedLoc) {
+                    const found = airportData.find(d => d.airports.includes(savedLoc));
+                    if (found) {
+                        safeSet(`${type}-country`, 'value', found.country);
+                        window.updateAirportOptions(type, savedLoc);
+                    }
+                }
+            });
+
             const fieldMap = {
                 'start-date': appData.inputs.startDate,
                 'end-date': appData.inputs.endDate,
@@ -315,7 +371,6 @@
             };
             Object.entries(fieldMap).forEach(([id, val]) => safeSet(id, 'value', val || ''));
 
-            // 目的地清單
             const destList = document.getElementById('destination-list-container');
             if(destList) {
                 destList.innerHTML = appData.destinations.map(d => `
@@ -332,7 +387,6 @@
                 `).join('');
             }
 
-            // 行程視圖
             const area = document.getElementById('itinerary-display-area');
             if(area) {
                 const days = getDays();
@@ -381,7 +435,7 @@
             }
         };
 
-        // --- 全域函式綁定 ---
+        // --- 全域函式綁定 (包含匯率與TXT功能) ---
         window.handleInputChange = () => {
             const fieldMap = { 'start-date': 'startDate', 'end-date': 'endDate', 'hotel-name': 'hotelName', 'depart-location': 'departLocation', 'depart-time': 'departTime', 'return-location': 'returnLocation', 'return-time': 'returnTime' };
             Object.entries(fieldMap).forEach(([id, key]) => {
@@ -411,6 +465,7 @@
         };
         window.clearDest = () => { window.showConfirm("確定清空清單？", () => { appData.destinations = []; save(); render(); }); };
         
+        // 匯入 TXT 功能
         window.importTxt = (e) => {
             const f = e.target.files[0];
             if(!f) return;
@@ -427,6 +482,7 @@
             r.readAsText(f);
         };
 
+        // 匯率計算功能
         window.calcRate = async () => {
             const b = document.getElementById('cur-base').value, t = document.getElementById('cur-target').value, a = document.getElementById('cur-amount').value;
             const rEl = document.getElementById('rate-result');
@@ -439,24 +495,17 @@
                 } catch(e) { rEl.textContent = "取得匯率失敗"; }
             }
         };
-        window.swapCur = () => { const b=document.getElementById('cur-base'), t=document.getElementById('cur-target'); [b.value, t.value] = [t.value, b.value]; window.calcRate(); };
+        window.swapCur = () => { 
+            const b = document.getElementById('cur-base');
+            const t = document.getElementById('cur-target'); 
+            [b.value, t.value] = [t.value, b.value]; 
+            window.calcRate(); 
+        };
 
-        // --- AI 邏輯 (使用手動輸入 Key) ---
+        // --- AI 邏輯 ---
         let userGeminiKey = localStorage.getItem('at_gemini_key') || '';
-        
-        const updateKeyInput = () => {
-            const input = document.getElementById('user-api-key');
-            if(input) input.value = userGeminiKey;
-        };
-
-        window.saveApiKey = () => {
-            const input = document.getElementById('user-api-key');
-            if(input) {
-                userGeminiKey = input.value.trim();
-                localStorage.setItem('at_gemini_key', userGeminiKey);
-            }
-        };
-
+        const updateKeyInput = () => { const input = document.getElementById('user-api-key'); if(input) input.value = userGeminiKey; };
+        window.saveApiKey = () => { const input = document.getElementById('user-api-key'); if(input) { userGeminiKey = input.value.trim(); localStorage.setItem('at_gemini_key', userGeminiKey); } };
         window.openAIModal = () => {
             updateKeyInput(); 
             const hotel = appData.inputs.hotelName || appData.inputs.departLocation || '目的地';
@@ -464,24 +513,18 @@
             safeSet('ai-prompt', 'value', `我住在 ${hotel}，已安排：${existing}。請推薦 5 個適合加入行程的周邊景點或美食，並附上簡短說明。請以 JSON 格式回傳，格式為：[{"name":"名稱","desc":"說明"}]`);
             document.getElementById('modal-ai').classList.remove('hidden');
         };
-
         window.fetchAISuggestions = async () => {
             if (!userGeminiKey) {
                 alert("⚠️ 請先輸入 Google Gemini API Key 才能使用 AI 功能。\n\n您可以點擊輸入框上方的連結免費取得。");
-                document.getElementById('user-api-key').focus();
-                return;
+                document.getElementById('user-api-key').focus(); return;
             }
-
             const promptText = document.getElementById('ai-prompt').value;
             const btn = document.getElementById('ai-gen-btn'), resDiv = document.getElementById('ai-results');
             btn.innerHTML = `AI 思考中...`; btn.disabled = true; resDiv.classList.add('hidden');
-            
             try {
                 const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${userGeminiKey}`;
                 const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: promptText }] }] }) });
-                
                 if (!response.ok) throw new Error("API Error");
-
                 const data = await response.json();
                 const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
                 let suggestions = JSON.parse(text.match(/\[.*\]/s)[0]);
@@ -492,18 +535,16 @@
                     </div>`).join('');
                 resDiv.classList.remove('hidden');
             } catch(err) { 
-                console.error(err);
-                alert("AI 連線失敗：請檢查 API Key 或網路連線"); 
+                console.error(err); alert("AI 連線失敗：請檢查 API Key 或網路連線"); 
             } finally { 
                 btn.innerHTML = `<span>重新生成推薦</span>`; btn.disabled = false; 
             }
         };
-        
         window.addFromAI = (name) => {
             if(!appData.destinations.find(d=>d.name===name)) { appData.destinations.push({name, scheduled: null}); save(); render(); event.target.innerText = "✓"; setTimeout(() => document.getElementById('modal-ai').classList.add('hidden'), 600); }
         };
 
-        // 詳細設定
+		// 詳細設定
         window.openDateModal = (n) => {
             activeEditName = n;
             const d = appData.destinations.find(x=>x.name===n); if(!d) return;
@@ -512,9 +553,18 @@
             safeSet('d-end', 'value', d.scheduled?.end || '12:00');
             safeSet('d-trans', 'value', d.scheduled?.transport || '地鐵');
             safeSet('d-cost', 'value', d.scheduled?.cost || '');
+            
             const days = getDays();
             const datesEl = document.getElementById('d-dates');
-            if(datesEl) datesEl.innerHTML = days.map(day => `<label class="flex items-center p-2 border rounded-lg cursor-pointer ${d.scheduled?.date===day.iso ? 'bg-indigo-50 border-indigo-300':'bg-white'}"><input type="radio" name="ddate" value="${day.iso}" ${d.scheduled?.date===day.iso?'checked':''} class="mr-2 accent-indigo-600"> <span class="font-bold">${day.disp}</span></label>`).join('');
+            
+            if(datesEl) {
+                // 優化：如果沒有旅行日期，顯示防呆提示
+                if (days.length === 0) {
+                    datesEl.innerHTML = `<div class="text-red-500 text-xs p-2 text-center font-bold bg-red-50 rounded">⚠️ 請先於最上方設定「Start Date」與「End Date」</div>`;
+                } else {
+                    datesEl.innerHTML = days.map(day => `<label class="flex items-center p-2 border rounded-lg cursor-pointer ${d.scheduled?.date===day.iso ? 'bg-indigo-50 border-indigo-300':'bg-white'}"><input type="radio" name="ddate" value="${day.iso}" ${d.scheduled?.date===day.iso?'checked':''} class="mr-2 accent-indigo-600"> <span class="font-bold">${day.disp}</span></label>`).join('');
+                }
+            }
             document.getElementById('modal-detail').classList.remove('hidden');
         };
         window.detailSave = () => {
@@ -587,6 +637,8 @@
 
         // --- 啟動流程 ---
         (async () => {
+            window.initCountrySelects();
+
             try { const local = localStorage.getItem(LS_KEY); if(local) { appData = JSON.parse(local); render(); } } catch(e) {}
 
             try {
