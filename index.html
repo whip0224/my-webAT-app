@@ -57,7 +57,9 @@
             </div>
             
             <div class="flex flex-wrap gap-2">
-                <button onclick="window.copyItinerary()" class="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-bold shadow hover:bg-teal-700 transition">複製文字</button>
+                <button onclick="document.getElementById('modal-manual').classList.remove('hidden')" class="px-3 py-2 bg-white text-gray-600 rounded-lg border border-gray-200 text-sm font-bold hover:bg-gray-50 transition shadow-sm">📖 說明</button>
+				
+				<button onclick="window.copyItinerary()" class="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-bold shadow hover:bg-teal-700 transition">複製文字</button>
                 <button onclick="window.openCloudModal()" class="px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg border border-indigo-100 text-sm font-bold transition">雲端設定</button>
                 <button onclick="window.openManagerModal()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg shadow hover:bg-indigo-700 text-sm font-bold text-nowrap transition">行程管理 (<span id="saved-count-badge">0</span>)</button>
             </div>
@@ -253,6 +255,39 @@
             </div>
         </div>
     </div>
+	
+	<div id="modal-manual" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center z-[150] modal backdrop-blur-sm">
+        <div class="bg-white p-6 rounded-2xl shadow-xl w-11/12 max-w-md max-h-[80vh] flex flex-col relative">
+            <button onclick="document.getElementById('modal-manual').classList.add('hidden')" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 font-bold text-xl">✕</button>
+            
+            <h3 class="text-xl font-bold mb-4 text-indigo-700 border-b pb-2 flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
+                快速使用指南
+            </h3>
+            
+            <div class="overflow-y-auto pr-2 space-y-5 text-sm text-gray-600 scrollbar-thin">
+                <div>
+                    <h4 class="font-bold text-gray-800 mb-1 text-base">1. 📅 基本日期設定</h4>
+                    <p class="leading-relaxed">請務必先在最上方設定<span class="text-indigo-600 font-bold">「Start Date (出發)」</span>與<span class="text-indigo-600 font-bold">「End Date (回程)」</span>，系統才能為您建立行程表與開放日期選項。</p>
+                </div>
+                <div>
+                    <h4 class="font-bold text-gray-800 mb-1 text-base">2. 📍 新增與排程景點</h4>
+                    <p class="leading-relaxed">在「目的地清單」輸入想去的地點並新增。接著<span class="text-indigo-600 font-bold">點擊該地點卡片</span>，即可安排該行程的日期、時間、交通方式與預算,用","分格開每一個目的地,可以一次過輸入多個地點。</p>
+                </div>
+                <div>
+                    <h4 class="font-bold text-gray-800 mb-1 text-base">3. 🤝 與旅伴共享行程</h4>
+                    <p class="leading-relaxed">點擊上方「雲端設定」切換至共享模式，只要與旅伴輸入<span class="text-indigo-600 font-bold">一模一樣的「共享金鑰」</span>（例如：TOKYO2026），就能即時共同編輯行程！</p>
+                </div>
+                <div>
+                    <h4 class="font-bold text-gray-800 mb-1 text-base">4. ✨ AI 旅遊靈感</h4>
+                    <p class="leading-relaxed">點擊目的地清單旁的「AI 靈感」，輸入您的 Gemini API Key，AI 會自動根據您的住宿與現有景點，幫您規劃周邊好去處。</p>
+                </div>
+            </div>
+            
+            <button onclick="document.getElementById('modal-manual').classList.add('hidden')" class="w-full mt-6 py-2 bg-gray-100 text-gray-700 rounded-xl font-bold text-sm hover:bg-gray-200 transition">我瞭解了</button>
+        </div>
+    </div>
+	
 
 	<script type="module">
         import airportData from './airports.js';
