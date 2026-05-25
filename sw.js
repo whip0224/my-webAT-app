@@ -1,6 +1,7 @@
 // sw.js - AmazingTravel PWA Service Worker
 
-const CACHE_NAME = 'amazing-travel-v3'; 
+const CACHE_NAME = 'amazing-travel-v3.1'; 
+//fix ios google map 返回主程式問題
 
 const ASSETS_TO_CACHE = [
   './',

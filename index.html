@@ -456,7 +456,11 @@
         };
 
         window.rmDest = (n) => { appData.destinations = appData.destinations.filter(d=>d.name!==n); save(); render(); };
-        window.openMap = (n) => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(n)}`, '_blank');
+        window.openMap = (n) => {
+			// 使用 Google Maps 官方標準的搜尋參數網址
+			const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(n)}`;
+			window.open(mapUrl, '_blank');
+		};
         window.openHotelMap = () => { const h = appData.inputs.hotelName; h ? window.openMap(h) : alert("請輸入酒店名稱"); };
         window.toggleDest = () => {
             const body = document.getElementById('dest-body');
